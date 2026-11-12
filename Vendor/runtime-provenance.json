@@ -1,0 +1,9 @@
+{
+  "project": "ggml-org/llama.cpp",
+  "release": "b12110",
+  "license": "MIT",
+  "platform": "macOS arm64+x86_64",
+  "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b12110",
+  "change": "Unmodified macOS framework copied from existing verified XCFramework; outer package excludes iOS and debug symbols.",
+  "binary_sha256": "aa567d3c0c65769c58272dce6499456d895c23d0168c915f0c139c475638785e"
+}

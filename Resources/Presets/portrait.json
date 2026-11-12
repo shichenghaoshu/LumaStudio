@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "beauty": { "enabled": true, "strength": 0.35, "skinTone": 0.25, "blemishRemoval": 0.2 },
+  "color": { "enabled": true, "presetID": "portrait", "intensity": 0.8, "referenceProfileID": null },
+  "export": { "format": "jpeg", "quality": 0.95 }
+}

@@ -1,0 +1,24 @@
+{
+  "seed": 20261110,
+  "training_license_approved": true,
+  "base_model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+  "precision": "bf16",
+  "max_length": 4096,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 16,
+  "lora_rank": 16,
+  "lora_alpha": 32,
+  "target_modules": [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj"
+  ],
+  "learning_rate": 0.0001,
+  "epochs": 3,
+  "license": "Apache-2.0",
+  "license_source": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct/blob/main/LICENSE"
+}

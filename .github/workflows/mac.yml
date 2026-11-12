@@ -1,0 +1,26 @@
+name: Mac build and shared tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select locally validated Xcode when available
+        run: |
+          if [ -d /Applications/Xcode_16.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.4.app
+          fi
+          xcodebuild -version
+      - name: Shared tests
+        run: swift test
+      - name: Voice MCP stdio protocol
+        run: python3 -m unittest discover -s Tests/VoiceMCPTests -v
+      - name: Mac Release build
+        run: xcodebuild -project LumaStudio.xcodeproj -scheme LumaStudioMac -configuration Release -destination 'platform=macOS' -derivedDataPath ReleaseData CODE_SIGN_IDENTITY=- build
