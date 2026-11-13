@@ -41,11 +41,22 @@ jobs:
       - name: Build Windows x64 Release
         working-directory: Apps/LumaStudioCross
         run: flutter build windows --release
+      - name: Exercise the actual Windows editor window
+        working-directory: Apps/LumaStudioCross
+        run: |
+          Remove-Item Env:LUMA_NATIVE_LIBRARY -ErrorAction SilentlyContinue
+          flutter test integration_test/editor_test.dart -d windows
       - name: Run the compiled Windows application self-test
         run: |
+          Remove-Item Env:LUMA_NATIVE_LIBRARY -ErrorAction SilentlyContinue
           $exe = "$env:GITHUB_WORKSPACE/Apps/LumaStudioCross/build/windows/x64/runner/Release/lumastudio.exe"
           $fixture = "$env:RUNNER_TEMP/luma-release-test"
           $report = "$env:GITHUB_WORKSPACE/Artifacts/windows-release-self-test.json"
+          New-Item -ItemType Directory -Force -Path "$fixture/raw" | Out-Null
+          Invoke-WebRequest -Uri 'https://raw.pixls.us/getfile.php/131/nice/Canon%20-%20EOS%207D%20-%20RAW%20%283:2%29.CR2' -OutFile "$fixture/raw/佳能.CR2" -MaximumRetryCount 3
+          Invoke-WebRequest -Uri 'https://raw.pixls.us/getfile.php/865/nice/Fujifilm%20-%20X-T2%20-%2014bit%2014bit%20compressed%20%283:2%29.RAF' -OutFile "$fixture/raw/富士.RAF" -MaximumRetryCount 3
+          if ((Get-FileHash "$fixture/raw/佳能.CR2" -Algorithm SHA256).Hash -ne 'B5E47C5FCF7332AC03E0134926F17A338A42E68C1FD7F83E16F45F4B767544E8') { throw 'Canon fixture checksum mismatch' }
+          if ((Get-FileHash "$fixture/raw/富士.RAF" -Algorithm SHA256).Hash -ne 'F756AD5BE551A8B3E1B503A8A6F7E8E637FBA519C0B0F8C79DD58E94B0287602') { throw 'Fuji fixture checksum mismatch' }
           $process = Start-Process -FilePath $exe -ArgumentList @('--self-test', $fixture, $report) -PassThru -Wait
           if (Test-Path $report) { Get-Content $report }
           if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw "Release execution failed: $($process.ExitCode)" }
@@ -58,6 +69,7 @@ jobs:
           path: |
             Deliverables/Release-0.5.0/LumaStudio-0.5.0-Windows-x64.zip
             Artifacts/windows-release-self-test.json
+            Artifacts/windows-editor-ui.png
             Artifacts/Performance/portable-local-self-test.json
           if-no-files-found: error
   android:

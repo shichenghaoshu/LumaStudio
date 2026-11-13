@@ -301,7 +301,7 @@ class _StudioPageState extends State<StudioPage> {
                               Expanded(flex: 5, child: stage()),
                               status(),
                               SizedBox(
-                                height: 85,
+                                height: 96,
                                 child: photoLibrary(vertical: false),
                               ),
                               Expanded(flex: 4, child: inspector()),
@@ -1009,8 +1009,10 @@ class _StudioPageState extends State<StudioPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('关闭'),
+            onPressed: s.agentBusy
+                ? s.cancelAgent
+                : () => Navigator.pop(dialog),
+            child: Text(s.agentBusy ? '停止' : '关闭'),
           ),
           FilledButton(
             onPressed: s.agentBusy

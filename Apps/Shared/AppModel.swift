@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import OSLog
 import UniformTypeIdentifiers
 import PhotoCore
 
@@ -119,6 +120,7 @@ import PhotoCore
     @ObservationIgnored private var batch: BatchProcessor
     @ObservationIgnored private var renderTask: Task<Void,Never>?
     @ObservationIgnored private var renderGeneration=UUID()
+    @ObservationIgnored private var previewWorkerID=UUID()
     @ObservationIgnored private var importIntent: ImportIntent = .photos
     @ObservationIgnored private var bookmarkURLs=[URL]()
     @ObservationIgnored private var restoring=false
@@ -196,11 +198,17 @@ import PhotoCore
     }
     func select(_ asset: PhotoAsset,proposal: Recipe?=nil) {
         guard !workflowBusy else {return}
+        // A fast switch can cancel a pending preview before its save. Persist
+        // the departing photo independently of the preview's cancellation.
+        if let previous=selected,let library,!restoring {
+            let snapshot=recipe
+            Task {do {try await library.saveRecipe(snapshot,for:previous.id)}catch{message="保存上一张照片的设置失败："+error.localizedDescription}}
+        }
         agentTask?.cancel();agentGeneration=UUID();agentBusy=false;agentRun=nil;agentStatus="用一句话描述你想要的效果"
         resetAgentProcess()
         undoRecipes=[];redoRecipes=[];canUndo=false;canRedo=false
         restoring=true
-        renderTask?.cancel();renderGeneration=UUID();selectedID=asset.id;preview=nil;original=nil;useCompanionJPEG=false
+        cancelPreviewWorker();selectedID=asset.id;preview=nil;original=nil;useCompanionJPEG=false
         activeMaskID=nil;maskPreview=nil;showMaskOverlay=false;drawingBrush=false;faceCount=0;previewBypassedParameters=[]
         rawCapabilities = .unavailable
         restoring=false
@@ -221,32 +229,66 @@ import PhotoCore
             schedulePreview()
         }
     }
+    func flushRecipeBeforeQuit() async -> Bool {
+        cancelPreviewWorker()
+        agentTask?.cancel();agentGeneration=UUID()
+        if agentBusy {agentBusy=false;agentProcessState = .cancelled}
+        guard let asset=selected,let library else {return true}
+        do {try await library.saveRecipe(recipe,for:asset.id);return true}
+        catch {message="保存当前照片的设置失败，应用暂未退出："+error.localizedDescription;return false}
+    }
+    private func cancelPreviewWorker() {
+        renderTask?.cancel()
+        renderTask=nil;previewWorkerID=UUID();renderGeneration=UUID();rendering=false
+    }
     func schedulePreview() {
-        guard !restoring,!agentBusy,let asset=selected,let processor else { return }
-        renderTask?.cancel();let token=UUID();renderGeneration=token;rendering=true
-        var previewRecipe=recipe
-        for id in previewBypassedParameters {ParameterCatalog.find(id)?.reset(&previewRecipe.document)}
-        if previewBypassedParameters.contains("color.curve") {previewRecipe.document.color.curve=RGBCurve()}
-        if previewBypassedParameters.contains("color.lut") {previewRecipe.document.color.lut=nil}
-        if previewBypassedParameters.contains("color.referenceProfileID") {previewRecipe.document.color.referenceProfileID=nil}
-        if previewBypassedParameters.contains("beauty.enabled") {previewRecipe.document.beauty.enabled=false}
-        if previewBypassedParameters.contains("masks") {previewRecipe.document.masks=[]}
-        let persistedRecipe=recipe
-        let r=previewRecipe,p=profile,u=workingURL(asset),maskID=showMaskOverlay ? activeMaskID : nil
+        guard !restoring,!agentBusy,selected != nil,processor != nil else {return}
+        renderGeneration=UUID();rendering=true
+        // At most one render runs. State changes replace its pending successor;
+        // they do not restart a debounce or cancel a useful interactive frame.
+        guard renderTask==nil else {return}
+        let worker=UUID();previewWorkerID=worker
         renderTask=Task {
-            do {
-                try await Task.sleep(for:.milliseconds(140));try Task.checkCancellation()
-                let result=try await processor.render(url:u,recipe:r,profile:p,maskPreviewID:maskID)
-                try Task.checkCancellation();guard token==renderGeneration else { return }
-                preview=result.image;original=result.original;faceCount=result.faceCount;maskPreview=result.localMaskPreview;rendering=false
-                renderStatus="\(result.faceCount) 张人脸 · \(result.beautyBackend) · \(Int(result.milliseconds)) ms"
-                // Save the authoritative settings even if a group is hidden in
-                // the preview, so editing while comparing cannot lose changes.
-                try await library?.saveRecipe(persistedRecipe,for:asset.id)
-            } catch is CancellationError {} catch {
-                guard token==renderGeneration else { return };rendering=false;renderStatus=error.localizedDescription
-                if asset.isRAW,asset.companionURL != nil,!useCompanionJPEG { message=error.localizedDescription+"\n可打开“使用配对 JPEG”继续编辑。" }
-                else { message=error.localizedDescription }
+            defer {if previewWorkerID==worker {renderTask=nil;rendering=false}}
+            while !Task.isCancelled {
+                guard previewWorkerID==worker,!agentBusy,let asset=selected,let processor else {return}
+                let token=renderGeneration,start=Date()
+                var previewRecipe=recipe
+                for id in previewBypassedParameters {ParameterCatalog.find(id)?.reset(&previewRecipe.document)}
+                if previewBypassedParameters.contains("color.curve") {previewRecipe.document.color.curve=RGBCurve()}
+                if previewBypassedParameters.contains("color.lut") {previewRecipe.document.color.lut=nil}
+                if previewBypassedParameters.contains("color.referenceProfileID") {previewRecipe.document.color.referenceProfileID=nil}
+                if previewBypassedParameters.contains("beauty.enabled") {previewRecipe.document.beauty.enabled=false}
+                if previewBypassedParameters.contains("masks") {previewRecipe.document.masks=[]}
+                let persistedRecipe=recipe,url=workingURL(asset),reference=profile,maskID=showMaskOverlay ? activeMaskID : nil
+                do {
+                    let result=try await processor.render(url:url,recipe:previewRecipe,profile:reference,maskPreviewID:maskID)
+                    try Task.checkCancellation()
+                    guard previewWorkerID==worker,selectedID==asset.id else {return}
+                    // During a gesture, completed frames are useful even while a
+                    // newer value waits. A stable final value is always rendered.
+                    if token==renderGeneration || parameterGestureBase != nil {
+                        preview=result.image;original=result.original;faceCount=result.faceCount;maskPreview=result.localMaskPreview
+                        renderStatus="\(result.faceCount) 张人脸 · \(result.beautyBackend) · \(Int(result.milliseconds)) ms"
+                        if parameterGestureBase != nil {LumaLog.pipeline.debug("Interactive preview frame completed")}
+                    }
+                    if token==renderGeneration {
+                        rendering=false
+                        // Save the authoritative document, not a bypassed preview.
+                        try await library?.saveRecipe(persistedRecipe,for:asset.id)
+                    }
+                } catch is CancellationError {return}
+                catch {
+                    guard previewWorkerID==worker,selectedID==asset.id else {return}
+                    if token==renderGeneration {
+                        rendering=false;renderStatus=error.localizedDescription
+                        message=error.localizedDescription+(asset.isRAW && asset.companionURL != nil && !useCompanionJPEG ? "\n可打开“使用配对 JPEG”继续编辑。" : "")
+                    }
+                }
+                guard previewWorkerID==worker,token != renderGeneration else {return}
+                // Cap cheap frames at about 30 Hz without delaying slower work.
+                let remaining=0.033-Date().timeIntervalSince(start)
+                if remaining>0 {do {try await Task.sleep(nanoseconds:UInt64(remaining*1_000_000_000))}catch{return}}
             }
         }
     }
@@ -459,7 +501,7 @@ import PhotoCore
     func runAgent() {
         guard !agentBusy,let asset=selected,let processor,let historyStore else { return }
         let text=instruction.trimmingCharacters(in:.whitespacesAndNewlines);guard !text.isEmpty else { return }
-        renderTask?.cancel();renderGeneration=UUID();rendering=false
+        cancelPreviewWorker();rendering=false
         let generation=UUID();agentGeneration=generation
         let snapshot=recipe,reference=profile,correction=automaticCorrection,preferModel=useLocalModel,cloud=cloudSettings
         let past=agentRun.map{[$0.instruction]} ?? []
@@ -800,7 +842,7 @@ extension AppModel {
         // Stop an older preview save from racing with the atomic restore.
         let refreshSelected=transaction.changes.contains(where:{$0.id==selectedID})
         let pendingRender=refreshSelected ? renderTask : nil
-        if refreshSelected {renderTask?.cancel();renderGeneration=UUID();rendering=false}
+        if refreshSelected {cancelPreviewWorker();rendering=false}
         Task {do {
             await pendingRender?.value
             try await library.undoSynchronization(transaction)

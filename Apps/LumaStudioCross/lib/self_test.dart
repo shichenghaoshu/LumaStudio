@@ -162,6 +162,27 @@ Future<bool> runReleaseSelfTest(Directory root, File report) async {
           (response['width'] as int) > 0,
           'RAW ${p.extension(item.path)} preview',
         );
+        final out = File(
+          p.join(root.path, 'raw-${p.basenameWithoutExtension(item.path)}.jpg'),
+        );
+        final result = await worker.request({
+          'command': 'export',
+          'path': item.path,
+          'edge': 0,
+          'recipe': Recipe().toJson(),
+          'output': out.path,
+          'longEdge': 1600,
+          'quality': 92,
+        });
+        check(
+          await out.length() > 1000,
+          'RAW ${p.extension(item.path)} full processing and export',
+        );
+        measurements.add({
+          'raw': p.extension(item.path),
+          'preview_ms': response['milliseconds'],
+          'full_processing_export_ms': result['milliseconds'],
+        });
       }
     }
     studio = Studio();

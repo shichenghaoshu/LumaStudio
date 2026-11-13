@@ -1,7 +1,7 @@
 name: Mac build and shared tests
 on:
   push:
-    branches: [main]
+    branches: [main, 'opencat/**']
   pull_request:
   workflow_dispatch:
 permissions:

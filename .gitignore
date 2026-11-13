@@ -48,3 +48,5 @@ Vendor/build-apple/
 *.jks
 *.keystore
 **/key.properties
+
+**/.kotlin/

@@ -78,6 +78,51 @@ const filterTitles = <String, String>{
   'airy': '空气感',
 };
 
+Recipe applyOnlineProposal(
+  Recipe current,
+  Map<String, dynamic> proposal,
+  String instruction,
+) {
+  if (proposal.keys.any(
+    (k) => !{'changes', 'filter', 'explanation'}.contains(k),
+  )) {
+    throw const FormatException('模型返回不支持的字段');
+  }
+  final changes = Map<String, dynamic>.from(proposal['changes'] as Map? ?? {});
+  var next = current;
+  final forbidden = RegExp(
+    r'不.{0,6}(美颜|磨皮|肤色)|(?:no|without|do not|don.t)\s+(?:beauty|retouch|smooth|skin)',
+    caseSensitive: false,
+  ).hasMatch(instruction);
+  final requested = RegExp(
+    r'美颜|磨皮|(?:提亮|柔化).{0,4}肤色|肤色.{0,3}(?:提亮|柔化)|smooth.{0,12}skin|brighten.{0,12}skin|beauty',
+    caseSensitive: false,
+  ).hasMatch(instruction);
+  for (final entry in changes.entries) {
+    final i = controls.indexWhere((c) => c.id == entry.key);
+    if (i < 0) throw FormatException('模型返回不支持的参数：${entry.key}');
+    if (entry.value is! num) throw const FormatException('模型参数必须是数字');
+    final v = (entry.value as num).toDouble();
+    if (!v.isFinite || v < controls[i].min || v > controls[i].max) {
+      throw FormatException('模型参数超出范围：${entry.key}');
+    }
+    if (i >= 16 && (forbidden || !requested)) continue;
+    next = next.set(i, v);
+  }
+  if (proposal.containsKey('filter')) {
+    final f = proposal['filter'];
+    if (f == null) {
+      next = next.copy(clearFilter: true);
+    } else {
+      if (f is! String || !filterTitles.containsKey(f)) {
+        throw const FormatException('模型返回未知滤镜');
+      }
+      next = next.copy(filter: f);
+    }
+  }
+  return next;
+}
+
 class Recipe {
   Recipe({
     List<double>? values,

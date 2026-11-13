@@ -86,7 +86,7 @@ class Studio extends ChangeNotifier {
       error = '',
       apiKey = '',
       endpoint = 'https://api.deepseek.com/chat/completions',
-      model = 'deepseek-chat';
+      model = 'deepseek-flash';
   String exportFormat = 'jpeg', batchMode = 'uniform';
   int quality = 95, longEdge = 0;
   int _generation = 0;
@@ -460,8 +460,20 @@ class Studio extends ChangeNotifier {
     }
   }
 
-  Future<void> runAgent(String instruction) async {
+  int _agentGeneration = 0;
+  http.Client? _cloudClient;
+  void cancelAgent() {
+    _agentGeneration++;
+    _cloudClient?.close();
+    _cloudClient = null;
+    agentBusy = false;
+    events.add('已停止，当前编辑保留');
+    refresh();
+  }
+
+  Future<void> runAgent(String instruction, {http.Client? transport}) async {
     if (current == null || agentBusy || busy || batchBusy) return;
+    if (instruction.trim().isEmpty) throw const FormatException('请先输入修图要求');
     if (apiKey.trim().isEmpty) {
       throw StateError('请先在接入设置中填写 API 密钥。密钥只保存在本次会话内。');
     }
@@ -478,7 +490,8 @@ class Studio extends ChangeNotifier {
     events.add('读取当前配方 · 照片保留在本机');
     notifyListeners();
     final old = recipe, photo = current!;
-    final client = http.Client();
+    final generation = ++_agentGeneration, client = transport ?? http.Client();
+    _cloudClient = client;
     try {
       events.add('请求在线模型 · $model');
       notifyListeners();
@@ -492,6 +505,7 @@ class Studio extends ChangeNotifier {
           'model': model,
           'temperature': 0.15,
           'max_tokens': 1024,
+          if (uri.host == 'api.deepseek.com') 'thinking': {'type': 'disabled'},
           'response_format': {'type': 'json_object'},
           'messages': [
             {
@@ -505,6 +519,7 @@ class Studio extends ChangeNotifier {
       final response = await client
           .send(request)
           .timeout(const Duration(seconds: 40));
+      if (disposed || generation != _agentGeneration) return;
       if (response.statusCode != 200) {
         throw StateError('在线服务返回 HTTP ${response.statusCode}；当前配方保留');
       }
@@ -518,38 +533,10 @@ class Studio extends ChangeNotifier {
       final outer = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>,
           content = outer['choices'][0]['message']['content'] as String;
       final proposal = jsonDecode(content) as Map<String, dynamic>;
-      var next = old;
+      final next = applyOnlineProposal(old, proposal, instruction);
       final changes = Map<String, dynamic>.from(
         proposal['changes'] as Map? ?? {},
       );
-      final forbidSkin = RegExp(
-        r'不要.*(美颜|磨皮|肤色)|不.*美颜|no\s+(beauty|retouch|skin)',
-        caseSensitive: false,
-      ).hasMatch(instruction);
-      for (final entry in changes.entries) {
-        final i = controls.indexWhere((c) => c.id == entry.key);
-        if (i < 0) throw FormatException('模型返回不支持的参数：${entry.key}');
-        final v = (entry.value as num).toDouble();
-        if (!v.isFinite || v < controls[i].min || v > controls[i].max) {
-          throw FormatException('模型参数超出范围：${entry.key}');
-        }
-        if (i >= 16 &&
-            (forbidSkin ||
-                !RegExp(
-                  r'美颜|磨皮|肤色|skin|beauty',
-                  caseSensitive: false,
-                ).hasMatch(instruction))) {
-          continue;
-        }
-        next = next.set(i, v);
-      }
-      final f = proposal['filter'];
-      if (f != null) {
-        if (!filterTitles.containsKey(f)) {
-          throw const FormatException('模型返回未知滤镜');
-        }
-        next = next.copy(filter: f);
-      }
       events.add('参数范围检查通过 · ${changes.length} 项建议');
       notifyListeners();
       // Render first, then commit. Network/decoding/render failures preserve history.
@@ -560,7 +547,10 @@ class Studio extends ChangeNotifier {
         'recipe': next.toJson(),
         'cube': await cube(next),
       });
-      if (disposed || current != photo) return;
+      if (disposed || current != photo || generation != _agentGeneration) {
+        return;
+      }
+      _generation++;
       undoStack.add(old);
       redoStack.clear();
       recipe = next;
@@ -570,18 +560,24 @@ class Studio extends ChangeNotifier {
       events.add('本地渲染完成 · ${result['milliseconds']} ms');
       events.add('已应用，可撤销 · ${proposal['explanation'] ?? '参数已更新'}');
     } catch (e) {
+      if (disposed || generation != _agentGeneration) return;
       events.add('执行失败，当前编辑保留');
       rethrow;
     } finally {
       client.close();
-      agentBusy = false;
-      if (!disposed) notifyListeners();
+      if (generation == _agentGeneration) {
+        _cloudClient = null;
+        agentBusy = false;
+        if (!disposed) notifyListeners();
+      }
     }
   }
 
   @override
   void dispose() {
     disposed = true;
+    _agentGeneration++;
+    _cloudClient?.close();
     _timer?.cancel();
     _worker.dispose();
     _exportWorker.dispose();
