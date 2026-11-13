@@ -1,6 +1,19 @@
 import SwiftUI
 import PhotoCore
 
+extension PhotoColorLabel {
+    var swatch: Color {
+        switch self {
+        case .none: return .clear
+        case .red: return Color(red:1,green:0.43,blue:0.43)
+        case .yellow: return Color(red:1,green:0.83,blue:0.3)
+        case .green: return Color(red:0.4,green:0.86,blue:0.5)
+        case .blue: return Color(red:0.4,green:0.67,blue:1)
+        case .purple: return Color(red:0.78,green:0.58,blue:1)
+        }
+    }
+}
+
 struct PhotoReviewActions: View {
     @Bindable var model: AppModel
     let ids: Set<UUID>
@@ -14,6 +27,13 @@ struct PhotoReviewActions: View {
         Section("旗标") {
             ForEach(PhotoFlag.allCases) { flag in
                 Button {model.updateReview(for:ids,flag:flag)} label: {Label(flag.title,systemImage:flag.symbol)}
+            }
+        }
+        Section("色标") {
+            ForEach(PhotoColorLabel.allCases) {color in
+                Button {model.updateReview(for:ids,colorLabel:color)} label: {
+                    Label(color == .none ? "清除色标" : color.title,systemImage:color == .none ? "tag.slash" : "tag.fill")
+                }.accessibilityLabel(color == .none ? "清除色标" : "设为"+color.title+"色标")
             }
         }
     }
@@ -36,10 +56,14 @@ struct PhotoReviewBadge: View {
         HStack(spacing:4) {
             if review.flag != .none {Image(systemName:review.flag.symbol)}
             if review.rating>0 {Text("\(review.rating)★").monospacedDigit()}
+            if review.colorLabel != .none {
+                Label(review.colorLabel.title,systemImage:"tag.fill").foregroundStyle(review.colorLabel.swatch)
+            }
         }.font(.system(size:9,weight:.semibold)).foregroundStyle(review.flag == .rejected ? .white : studioAccent)
             .padding(.horizontal,4).padding(.vertical,3)
-            .background(.black.opacity(review.rating>0 || review.flag != .none ? 0.75 : 0),in:RoundedRectangle(cornerRadius:3))
-            .accessibilityLabel("\(review.flag.title)，\(review.rating) 星")
+            .background(.black.opacity(review.rating>0 || review.flag != .none || review.colorLabel != .none ? 0.75 : 0),in:RoundedRectangle(cornerRadius:3))
+            .accessibilityElement(children:.ignore)
+            .accessibilityLabel("\(review.flag.title)，\(review.rating) 星，\(review.colorLabel.title)")
     }
 }
 
@@ -53,6 +77,10 @@ struct PhotoFilterMenu: View {
                 ForEach(1...5,id: \.self) {Text("\($0) 星及以上").tag($0)}
             }
             Picker("旗标",selection:$model.photoFilter.flag) {ForEach(PhotoFlagFilter.allCases){Text($0.title).tag($0)}}
+            Picker("色标",selection:$model.photoFilter.colorLabel) {
+                Text("全部色标").tag(Optional<PhotoColorLabel>.none)
+                ForEach(PhotoColorLabel.allCases) {Text($0.title).tag(Optional($0))}
+            }
             Picker("排序",selection:$model.photoFilter.sort) {ForEach(PhotoSortOrder.allCases){Text($0.title).tag($0)}}
             Divider()
             Button("清除所有筛选"){model.photoFilter=PhotoFilter()}.disabled(!model.photoFilter.isActive)

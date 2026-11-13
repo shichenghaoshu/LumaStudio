@@ -4,6 +4,8 @@
 
 [下载 Mac、Windows、Android Release](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.0 使用说明、性能证据与平台限制](Documentation/RELEASE_0.5.0.md)
 
+此开发分支提供 [Mac 0.5.1 色标候选功能](Documentation/COLOR_LABELS.md)：五种颜色标签、单张/批量标记与组合筛选。该候选版独立构建，真实界面验收待 Mac 解锁后完成，已发布的 0.5.0 三平台安装包保持不变。
+
 当前提供 **184 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
 
 选片支持星标/旗标、组合筛选和排序；**13 组参数同步与整组撤回**保留目标锁，批量可按统一配方、每张已存设置或逐张 AI 方案导出。步骤见 [选片与同步](Documentation/PIXCAKE_WORKFLOW.md)。最终使用入口为 `Deliverables/LumaStudio.app`，历史包按版本保留。

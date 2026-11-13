@@ -823,11 +823,11 @@ extension AppModel {
     }
     func pruneHiddenSelection() { selection.formIntersection(Set(visibleAssets.map(\.id))) }
     func review(for id: UUID)->PhotoReview {photoReviews[id] ?? PhotoReview()}
-    func updateReview(for ids: Set<UUID>,rating: Int?=nil,flag: PhotoFlag?=nil) {
+    func updateReview(for ids: Set<UUID>,rating: Int?=nil,flag: PhotoFlag?=nil,colorLabel: PhotoColorLabel?=nil) {
         guard !reviewBusy,!workflowBusy,let library,!ids.isEmpty else {return}
         reviewBusy=true
         Task {defer{reviewBusy=false};do {
-            try await library.updateReviews(for:ids,rating:rating,flag:flag)
+            try await library.updateReviews(for:ids,rating:rating,flag:flag,colorLabel:colorLabel)
             photoReviews=try await library.reviews();pruneHiddenSelection()
         } catch {message=error.localizedDescription}}
     }

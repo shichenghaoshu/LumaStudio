@@ -34,6 +34,31 @@ final class PhotoWorkflowTests: XCTestCase {
         try await library.updateReviews(for:[photos[0].id],rating:0,flag:PhotoFlag.none)
         let cleared=try await library.reviews();XCTAssertEqual(cleared[photos[0].id],PhotoReview())
     }
+    func testColorLabelsPersistAndPartialMetadataUpdatesPreserveOtherFieldsAndRecipes() async throws {
+        let root=try temporary();defer{try? FileManager.default.removeItem(at:root)}
+        let location=root.appendingPathComponent("library"),library=try PhotoLibrary(root:location)
+        let photos=try await importPhotos(library,at:root),ids=Set(photos.map(\.id))
+        let hashes=try photos.map{try ContentDigest.sha256($0.originalURL)}
+        var recipe=Recipe();recipe.color.exposure=0.25;try await library.saveRecipe(recipe,for:photos[0].id)
+        try await library.updateReviews(for:ids,rating:4,flag:.picked)
+        try await library.updateReviews(for:[photos[0].id,photos[1].id],colorLabel:.red)
+        try await library.updateReviews(for:[photos[0].id],rating:2,flag:.rejected)
+        let before=try await library.reviews()
+        do {
+            try await library.updateReviews(for:[photos[0].id,UUID()],colorLabel:.blue)
+            XCTFail("Stale targets must reject the complete color-label update")
+        } catch {}
+        let unchanged=try await library.reviews();XCTAssertEqual(unchanged,before)
+        let reopened=try PhotoLibrary(root:location),restored=try await reopened.reviews()
+        XCTAssertEqual(restored[photos[0].id],PhotoReview(rating:2,flag:.rejected,colorLabel:.red))
+        XCTAssertEqual(restored[photos[1].id],PhotoReview(rating:4,flag:.picked,colorLabel:.red))
+        XCTAssertEqual(restored[photos[2].id],PhotoReview(rating:4,flag:.picked,colorLabel:.none))
+        try await reopened.updateReviews(for:[photos[0].id],colorLabel:PhotoColorLabel.none)
+        let cleared=try await reopened.reviews(),savedRecipe=try await reopened.recipe(for:photos[0].id)
+        XCTAssertEqual(cleared[photos[0].id],PhotoReview(rating:2,flag:.rejected,colorLabel:.none))
+        XCTAssertEqual(savedRecipe,recipe)
+        XCTAssertEqual(try photos.map{try ContentDigest.sha256($0.originalURL)},hashes)
+    }
     func testSynchronizationAndUndoPreserveOriginalsAndSourceRecipe() async throws {
         let root=try temporary();defer{try? FileManager.default.removeItem(at:root)}
         let library=try PhotoLibrary(root:root.appendingPathComponent("library")),photos=try await importPhotos(library,at:root)

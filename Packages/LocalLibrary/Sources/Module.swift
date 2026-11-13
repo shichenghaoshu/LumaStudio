@@ -130,13 +130,14 @@ public actor PhotoLibrary: ModelActor {
         }
         return result
     }
-    public func updateReviews(for ids: Set<UUID>, rating: Int? = nil, flag: PhotoFlag? = nil) throws {
+    public func updateReviews(for ids: Set<UUID>, rating: Int? = nil, flag: PhotoFlag? = nil, colorLabel: PhotoColorLabel? = nil) throws {
         if let rating, !(0...5).contains(rating) { throw LumaError.corruptData("星标需在 0–5 之间") }
         let photos = try photos(matching: ids)
         // Prepare everything before mutating the context, including corrupt-data checks.
         let updates = try photos.map { photo -> (StoredPhoto, Data) in
             var review = try photo.reviewData.map { try JSONDecoder().decode(PhotoReview.self, from: $0).validated() } ?? PhotoReview()
             if let rating { review.rating = rating }; if let flag { review.flag = flag }
+            if let colorLabel { review.colorLabel = colorLabel }
             return (photo, try JSONEncoder().encode(review))
         }
         for (photo, data) in updates { photo.reviewData = data }

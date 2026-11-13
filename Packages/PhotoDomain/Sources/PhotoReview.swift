@@ -7,10 +7,36 @@ public enum PhotoFlag: String, Codable, CaseIterable, Identifiable, Sendable {
     public var symbol: String { switch self { case .none: return "flag"; case .picked: return "flag.fill"; case .rejected: return "xmark.circle" } }
 }
 
+public enum PhotoColorLabel: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none, red, yellow, green, blue, purple
+    public var id: Self {self}
+    public var title: String {
+        switch self {
+        case .none: return "无色标"
+        case .red: return "红色"
+        case .yellow: return "黄色"
+        case .green: return "绿色"
+        case .blue: return "蓝色"
+        case .purple: return "紫色"
+        }
+    }
+}
+
 public struct PhotoReview: Codable, Equatable, Sendable {
     public var rating: Int
     public var flag: PhotoFlag
-    public init(rating: Int = 0, flag: PhotoFlag = .none) { self.rating = rating; self.flag = flag }
+    public var colorLabel: PhotoColorLabel
+    public init(rating: Int = 0, flag: PhotoFlag = .none, colorLabel: PhotoColorLabel = .none) {
+        self.rating = rating; self.flag = flag; self.colorLabel = colorLabel
+    }
+    private enum CodingKeys: String, CodingKey {case rating, flag, colorLabel}
+    public init(from decoder: Decoder) throws {
+        let c=try decoder.container(keyedBy:CodingKeys.self)
+        rating=try c.decode(Int.self,forKey:.rating)
+        flag=try c.decode(PhotoFlag.self,forKey:.flag)
+        // Existing reviewData contains only rating and flag; no store migration is needed.
+        colorLabel=try c.decodeIfPresent(PhotoColorLabel.self,forKey:.colorLabel) ?? .none
+    }
     public func validated() throws -> Self {
         guard (0...5).contains(rating) else { throw LumaError.corruptData("星标需在 0–5 之间") }
         return self
@@ -37,14 +63,17 @@ public struct PhotoFilter: Equatable, Sendable {
     public var rawOnly = false
     public var minimumRating = 0
     public var flag: PhotoFlagFilter = .all
+    /// nil means all labels; .some(.none) selects photos without a color label.
+    public var colorLabel: PhotoColorLabel? = nil
     public var sort: PhotoSortOrder = .newest
     public init() {}
-    public var isActive: Bool { !query.isEmpty || rawOnly || minimumRating > 0 || flag != .all }
+    public var isActive: Bool { !query.isEmpty || rawOnly || minimumRating > 0 || flag != .all || colorLabel != nil }
     public func apply(to assets: [PhotoAsset], reviews: [UUID: PhotoReview]) -> [PhotoAsset] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return assets.filter { asset in
             let review = reviews[asset.id] ?? PhotoReview()
             return (!rawOnly || asset.isRAW) && review.rating >= minimumRating && flag.matches(review.flag)
+                && (colorLabel == nil || colorLabel == review.colorLabel)
                 && (query.isEmpty || asset.name.localizedCaseInsensitiveContains(query))
         }.sorted { a, b in
             switch sort {
