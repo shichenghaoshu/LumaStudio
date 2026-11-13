@@ -27,7 +27,9 @@ final class ModelTests: XCTestCase {
         let empty=try await manager.list();XCTAssertTrue(empty.isEmpty)
         let item=try await manager.install(package:package(root,version:"good"),device:device)
         try Data("tampered".utf8).write(to:item.url)
-        do { _=try await manager.activeAgent(device:device);XCTFail("tampered model loaded") } catch {}
+        // Validate integrity independently of whether this CPU can run the native agent.
+        // activeAgent legitimately returns nil on an Intel CI runner before loading a model.
+        do { _=try await manager.active(role:.editAgent,device:device);XCTFail("tampered model loaded") } catch {}
     }
     func testCoreMLDirectoryHashIsDeterministicAndRejectsLinks() throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true);defer{try? FileManager.default.removeItem(at:root)}
