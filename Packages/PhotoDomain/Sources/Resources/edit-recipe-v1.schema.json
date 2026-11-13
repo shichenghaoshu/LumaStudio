@@ -310,7 +310,7 @@
         },
         "texturePreservation": {
           "type": "number",
-          "minimum": 0.6,
+          "minimum": 0,
           "maximum": 1
         }
       },

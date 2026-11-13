@@ -8,7 +8,7 @@ public enum InstructionParser {
         let t=text.lowercased();var intent=InstructionConstraints()
         func positive(_ word: String)->Bool {
             guard t.contains(word) else { return false }
-            return t.range(of:"(?:不要|不用|不必|别|不需要|禁止)[^，。；,;]{0,3}"+NSRegularExpression.escapedPattern(for:word),options:.regularExpression)==nil
+            return t.range(of:"(?:不要|不用|不必|别|不需要|禁止|关闭|不)[^，。；,;但只]{0,3}"+NSRegularExpression.escapedPattern(for:word),options:.regularExpression)==nil
         }
         if ["提亮","亮一点","更亮","增亮","brighten","brighter"].contains(where:positive) { intent.brightnessDirection=1 }
         if ["压暗","暗一点","更暗","降低曝光","darker","darken"].contains(where:positive) { intent.brightnessDirection = -1 }
@@ -17,15 +17,16 @@ public enum InstructionParser {
         if ["暖一点","暖色","暖调","暖一些","偏暖","warmer","warm"].contains(where:positive) { intent.warmthDirection=1 }
         if ["冷一点","冷色","冷调","偏冷","cooler","cool"].contains(where:positive) { intent.warmthDirection = -1 }
         intent.beautyForbidden=["不磨皮","不要磨皮","不做磨皮","不要做磨皮","关闭美颜","不要美颜","不用美颜","不美颜","不做美颜","不要做美颜","no retouch","no smoothing"].contains(where:t.contains)
-        intent.beautyRequested = !intent.beautyForbidden && ["磨皮","美颜","皮肤","肤色","瑕疵","retouch","skin"].contains(where:positive)
-        intent.preserveTexture=true
+        intent.beautyRequested = !intent.beautyForbidden && ["磨皮","美颜","皮肤","肤色","瑕疵","美白","瓷白","红润","瘦脸","大眼","retouch","skin"].contains(where:positive)
+        intent.preserveTexture = !["强效","重度","高强度","瓷白","网红","不保留纹理","可以不自然","intensive","glamour"].contains(where:positive)
+        if ["保留皮肤纹理","保留纹理","自然美颜"].contains(where:positive),!t.contains("不保留纹理") {intent.preserveTexture=true}
         if ["背景","background"].contains(where:t.contains) { intent.requestedLocalRegion = .background }
         else if ["人物","主体","subject"].contains(where:t.contains) { intent.requestedLocalRegion = .subject }
         else if ["人脸","脸部","face"].contains(where:t.contains) { intent.requestedLocalRegion = .face }
         else if ["皮肤局部","只调皮肤"].contains(where:t.contains) { intent.requestedLocalRegion = .skin }
         if ["头发","hair"].contains(where:t.contains) { intent.unavailableRequests.append("头发分割模型尚未安装") }
         if ["天空","sky"].contains(where:t.contains) { intent.unavailableRequests.append("天空分割模型尚未安装") }
-        for word in ["瘦脸","瘦身","大眼","换脸","换背景","去掉路人","消除路人","生成","液化"] where t.contains(word) { intent.unavailableRequests.append("“\(word)”尚未提供可执行工具") }
+        for word in ["瘦身","换脸","换背景","去掉路人","消除路人","生成","液化"] where t.contains(word) { intent.unavailableRequests.append("“\(word)”尚未提供可执行工具") }
         return intent
     }
 }
@@ -59,6 +60,7 @@ public struct LocalRulePlanner: Sendable {
         if t.contains("自然") || t.contains("natural") { r.beauty.strength=min(r.beauty.strength,0.35);r.beauty.texturePreservation=0.96;if ["更自然","再自然","more natural"].contains(where:t.contains) { r.color.intensity *= 0.7 } }
         if intent.beautyRequested,context.analysis.faceCount>0 { r.beauty.enabled=true }
         if intent.beautyForbidden { r.beauty.enabled=false }
+        Self.applyBeautyRequest(context.instruction,to:&r,faceCount:context.analysis.faceCount)
         if t.contains("不美白") || t.contains("不要美白") { r.beauty.skinTone=0 }
         if t.contains("重置") || t.contains("恢复原图") || t.contains("reset") { return EditRecipe() }
         var adjustment=GlobalAdjustments()
@@ -98,6 +100,28 @@ public struct LocalRulePlanner: Sendable {
         r=ParameterLockPolicy.applying(r,preserving:context.currentRecipe)
         if intent.beautyForbidden || context.analysis.faceCount==0 {r.beauty.enabled=false}
         r.operations=[];try r.validateParameters();return r
+    }
+    public static func applyBeautyRequest(_ text: String,to r: inout EditRecipe,faceCount: Int) {
+        let t=text.lowercased(),intent=InstructionParser.parse(text)
+        func positive(_ word: String) -> Bool {
+            t.contains(word) && t.range(of:"(?:不要|不用|不必|别|不需要|禁止|关闭|不)[^，。；,;]{0,3}"+NSRegularExpression.escapedPattern(for:word),options:.regularExpression)==nil
+        }
+        if intent.beautyForbidden || faceCount==0 {r.beauty.enabled=false;return}
+        if intent.beautyRequested {
+            r.beauty.enabled=true
+            if !intent.preserveTexture {
+                let face=r.beauty.faceSlimming,eyes=r.beauty.eyeEnlargement
+                r.beauty=(positive("瓷白") ? BeautyStyle.porcelain : BeautyStyle.intensive).settings
+                r.beauty.faceSlimming=face;r.beauty.eyeEnlargement=eyes
+            }
+            if positive("美白") {r.beauty.skinWhitening=max(r.beauty.skinWhitening,0.6)}
+            if positive("红润") {r.beauty.skinRosiness=max(r.beauty.skinRosiness,0.35)}
+            if positive("瘦脸") {r.beauty.faceSlimming=max(r.beauty.faceSlimming,0.65)}
+            if positive("大眼") {r.beauty.eyeEnlargement=max(r.beauty.eyeEnlargement,0.6)}
+        }
+        if t.contains("不要瘦脸") || t.contains("不瘦脸") || t.contains("关闭瘦脸") {r.beauty.faceSlimming=0}
+        if t.contains("不要大眼") || t.contains("不放大眼") || t.contains("关闭大眼") {r.beauty.eyeEnlargement=0}
+        if t.contains("不要美白") || t.contains("不美白") {r.beauty.skinWhitening=0;r.beauty.skinTone=0}
     }
     public static func applyExplicitParameters(_ text: String,to recipe: inout EditRecipe) {
         for p in ParameterCatalog.all {

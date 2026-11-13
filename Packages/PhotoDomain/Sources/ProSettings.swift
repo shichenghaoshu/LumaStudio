@@ -54,9 +54,14 @@ public struct BeautySettings: Codable, Equatable, Sendable {
     public var skinBrightness: Float = 0
     public var skinSaturation: Float = 1
     public var shadowRepair: Float = 0
+    public var intensiveSmoothing: Float = 0
+    public var skinWhitening: Float = 0
+    public var skinRosiness: Float = 0
+    public var faceSlimming: Float = 0
+    public var eyeEnlargement: Float = 0
     public var enabled: Bool = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case strength,radius,smoothing,texturePreservation,detailRecovery,sharpness,blemishRemoval,blemishThreshold,skinTone,toneUniformity,skinTemperature,skinTint,skinBrightness,skinSaturation,shadowRepair,enabled }
+    private enum CodingKeys: String, CodingKey { case strength,radius,smoothing,texturePreservation,detailRecovery,sharpness,blemishRemoval,blemishThreshold,skinTone,toneUniformity,skinTemperature,skinTint,skinBrightness,skinSaturation,shadowRepair,intensiveSmoothing,skinWhitening,skinRosiness,faceSlimming,eyeEnlargement,enabled }
     public init(from decoder: Decoder) throws {
         self.init(); let c = try decoder.container(keyedBy: CodingKeys.self)
         strength = try c.decodeIfPresent(Float.self, forKey: .strength) ?? strength
@@ -74,7 +79,26 @@ public struct BeautySettings: Codable, Equatable, Sendable {
         skinBrightness = try c.decodeIfPresent(Float.self, forKey: .skinBrightness) ?? skinBrightness
         skinSaturation = try c.decodeIfPresent(Float.self, forKey: .skinSaturation) ?? skinSaturation
         shadowRepair = try c.decodeIfPresent(Float.self, forKey: .shadowRepair) ?? shadowRepair
+        intensiveSmoothing = try c.decodeIfPresent(Float.self, forKey: .intensiveSmoothing) ?? intensiveSmoothing
+        skinWhitening = try c.decodeIfPresent(Float.self, forKey: .skinWhitening) ?? skinWhitening
+        skinRosiness = try c.decodeIfPresent(Float.self, forKey: .skinRosiness) ?? skinRosiness
+        faceSlimming = try c.decodeIfPresent(Float.self, forKey: .faceSlimming) ?? faceSlimming
+        eyeEnlargement = try c.decodeIfPresent(Float.self, forKey: .eyeEnlargement) ?? eyeEnlargement
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? enabled
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c=encoder.container(keyedBy:CodingKeys.self)
+        try c.encode(strength,forKey:.strength);try c.encode(radius,forKey:.radius);try c.encode(smoothing,forKey:.smoothing)
+        try c.encode(texturePreservation,forKey:.texturePreservation);try c.encode(detailRecovery,forKey:.detailRecovery);try c.encode(sharpness,forKey:.sharpness)
+        try c.encode(blemishRemoval,forKey:.blemishRemoval);try c.encode(blemishThreshold,forKey:.blemishThreshold);try c.encode(skinTone,forKey:.skinTone)
+        try c.encode(toneUniformity,forKey:.toneUniformity);try c.encode(skinTemperature,forKey:.skinTemperature);try c.encode(skinTint,forKey:.skinTint)
+        try c.encode(skinBrightness,forKey:.skinBrightness);try c.encode(skinSaturation,forKey:.skinSaturation);try c.encode(shadowRepair,forKey:.shadowRepair)
+        try c.encode(enabled,forKey:.enabled)
+        if intensiveSmoothing != 0 {try c.encode(intensiveSmoothing,forKey:.intensiveSmoothing)}
+        if skinWhitening != 0 {try c.encode(skinWhitening,forKey:.skinWhitening)}
+        if skinRosiness != 0 {try c.encode(skinRosiness,forKey:.skinRosiness)}
+        if faceSlimming != 0 {try c.encode(faceSlimming,forKey:.faceSlimming)}
+        if eyeEnlargement != 0 {try c.encode(eyeEnlargement,forKey:.eyeEnlargement)}
     }
 }
 

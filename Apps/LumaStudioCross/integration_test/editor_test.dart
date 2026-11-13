@@ -47,6 +47,18 @@ void main() {
       await tester.tap(find.byTooltip('撤销编辑'));
       await ready();
       expect(s.recipe.values[0], before);
+      await tester.ensureVisible(find.text('肤色').first);
+      await tester.tap(find.text('肤色').first);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('高强度'));
+      await tester.tap(find.text('高强度'));
+      await ready();
+      expect(s.recipe.values[16], 1);
+      expect(s.recipe.values[18], 0);
+      expect(s.recipe.values[22], greaterThan(.5));
+      await tester.tap(find.byTooltip('撤销编辑'));
+      await ready();
+      expect(s.recipe.values[16], 0);
       await tester.ensureVisible(find.text('滤镜').first);
       await tester.tap(find.text('滤镜').first);
       await tester.pumpAndSettle();

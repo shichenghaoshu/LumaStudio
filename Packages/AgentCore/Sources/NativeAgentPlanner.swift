@@ -28,7 +28,6 @@ public actor NativeAgentPlanner: AgentPlanner {
                 let intent=InstructionParser.parse(context.instruction)
                 if let region=intent.requestedLocalRegion,!recipe.masks.contains(where:{$0.kind==region}) { throw LumaError.corruptData("模型没有保留指令要求的局部区域") }
                 if intent.beautyForbidden || context.analysis.faceCount==0 { recipe.beauty.enabled=false }
-                recipe.beauty.texturePreservation=max(0.9,recipe.beauty.texturePreservation)
                 if recipe.color.referenceProfileID != context.referenceProfileID { recipe.color.referenceProfileID=nil }
                 recipe.operations=[];try ToolRegistry().validate(recipe)
                 return AgentPlan(recipe:recipe,source:model.manifest.displayName+" + 约束检查",fallbackReason:nil,planningMilliseconds:Date().timeIntervalSince(start)*1000)
@@ -53,7 +52,7 @@ public actor NativeAgentPlanner: AgentPlanner {
         version:1.
         global: object with optional numeric fields exposure[-3,3] EV default0,contrast[0.5,1.5] default1,highlights/shadows/whites/blacks/vibrance[-1,1] default0,temperature[2500,10000] default6500 (higher=warmer),tint[-100,100] default0,saturation[0,2] default1.
         color: {"lut":null or "natural"/"portrait"/"film"/"warm"/"cool"/"clean","intensity":0..1,"referenceProfileID":null or supplied reference id}. This base-model planner uses these three color keys only.
-        beauty: {"enabled":boolean,"strength":0..1,"skinTone":0..1,"blemishRemoval":0..1,"texturePreservation":0.9..1}. Default disabled,strength0.35,texturePreservation0.94. Never enable when face_count=0 or user forbids it.
+        beauty: {"enabled":boolean,"strength":0..1,"skinTone":0..1,"blemishRemoval":0..1,"texturePreservation":0..1}. Default disabled,strength0.35,texturePreservation0.94. Intensive retouch may reduce texture preservation to 0. Never enable when face_count=0 or user forbids it. The rule preflight applies requested intensive skin, slimming and eye enlargement controls.
         masks: [] or [{"id":"local_1","kind":"face"/"skin"/"subject"/"background","amount":1,"adjustments":{same numeric fields as global}}]. If user says only background/face/person, put adjustments in that mask and leave global neutral. Hair and sky are unavailable.
         operations:[] (the registry compiles safe ordered tool calls).
         evaluation:{"automaticCorrection":true,"maxCorrections":2,"preserveSkin":true}.

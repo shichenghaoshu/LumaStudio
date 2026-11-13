@@ -34,10 +34,12 @@ public enum IntentSafetyGate {
             if intent.requestedLocalRegion==nil,!t.contains("删除蒙版"),!t.contains("重置") {r.masks=current.masks}
             else if let region=intent.requestedLocalRegion {r.masks=current.masks.filter{$0.kind != region}+r.masks.filter{$0.kind==region}}
         }
+        LocalRulePlanner.applyBeautyRequest(context.instruction,to:&r,faceCount:context.analysis.faceCount)
+        if !t.contains("瘦脸") {r.beauty.faceSlimming=draft.beauty.faceSlimming}
+        if !t.contains("大眼") {r.beauty.eyeEnlargement=draft.beauty.eyeEnlargement}
         LocalRulePlanner.applyExplicitParameters(context.instruction,to:&r)
         r=ParameterLockPolicy.applying(r,preserving:context.currentRecipe)
         if intent.beautyForbidden || context.analysis.faceCount==0 { r.beauty.enabled=false }
-        r.beauty.texturePreservation=max(0.9,r.beauty.texturePreservation)
         if r.color.referenceProfileID != context.referenceProfileID { r.color.referenceProfileID=nil }
         r.operations=[];try r.validateParameters();return r
     }

@@ -33,7 +33,29 @@ const controls = <Control>[
   Control('intensity', '滤镜强度', 0, 1, 0.8, section: '滤镜'),
   Control('skinSmooth', '肤色柔化', 0, 1, 0, section: '肤色'),
   Control('skinBright', '肤色提亮', 0, 1, 0, section: '肤色'),
+  Control('skinTexture', '纹理保留', 0, 1, 1, section: '肤色'),
+  Control('skinRadius', '磨皮范围', 0.5, 8, 1, section: '肤色'),
+  Control('skinEven', '肤色均匀', 0, 1, 0, section: '肤色'),
+  Control('skinWarmth', '肤色冷暖', -1, 1, 0, section: '肤色'),
+  Control('skinWhiten', '瓷白美白', 0, 1, 0, section: '肤色'),
+  Control('skinRosy', '红润肤色', 0, 1, 0, section: '肤色'),
 ];
+const beautyStyles = ['自然', '精修', '瓷白', '高强度'];
+Recipe beautyStyle(Recipe current, String title) {
+  final values = switch (title) {
+    '自然' => [0.3, 0.08, 0.9, 1.0, 0.12, 0.0, 0.0, 0.0],
+    '精修' => [0.65, 0.2, 0.55, 2.2, 0.4, 0.05, 0.15, 0.1],
+    '瓷白' => [0.9, 0.4, 0.15, 4.0, 0.8, 0.0, 0.8, 0.1],
+    '高强度' => [1.0, 0.45, 0.0, 6.0, 0.95, 0.1, 0.65, 0.35],
+    _ => throw const FormatException('未知美颜预设'),
+  };
+  var next = current;
+  for (var i = 0; i < values.length; i++) {
+    next = next.set(16 + i, values[i]);
+  }
+  return next;
+}
+
 const bands = [
   'red',
   'orange',
@@ -95,7 +117,7 @@ Recipe applyOnlineProposal(
     caseSensitive: false,
   ).hasMatch(instruction);
   final requested = RegExp(
-    r'美颜|磨皮|(?:提亮|柔化).{0,4}肤色|肤色.{0,3}(?:提亮|柔化)|smooth.{0,12}skin|brighten.{0,12}skin|beauty',
+    r'美颜|磨皮|美白|瓷白|红润|(?:提亮|柔化|统一).{0,4}肤色|肤色.{0,3}(?:提亮|柔化|统一)|smooth.{0,12}skin|brighten.{0,12}skin|beauty',
     caseSensitive: false,
   ).hasMatch(instruction);
   for (final entry in changes.entries) {
@@ -107,6 +129,13 @@ Recipe applyOnlineProposal(
       throw FormatException('模型参数超出范围：${entry.key}');
     }
     if (i >= 16 && (forbidden || !requested)) continue;
+    if (entry.key == 'skinWhiten' &&
+        RegExp(r'不.{0,3}美白|不.{0,3}瓷白').hasMatch(instruction)) {
+      continue;
+    }
+    if (entry.key == 'skinRosy' && RegExp(r'不.{0,3}红润').hasMatch(instruction)) {
+      continue;
+    }
     next = next.set(i, v);
   }
   if (proposal.containsKey('filter')) {

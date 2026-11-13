@@ -3,6 +3,23 @@ import CoreImage
 import PhotoCore
 
 final class AgentTests: XCTestCase {
+    func testIntensiveBeautyRespectsExplicitExclusionsAndManualState() throws {
+        let cg=try XCTUnwrap(CIContext().createCGImage(CIImage(color:.gray).cropped(to:CGRect(x:0,y:0,width:32,height:32)),from:CGRect(x:0,y:0,width:32,height:32)))
+        let analysis=ImageAnalysis(image:cg,faceCount:1,metrics:try PixelMetrics.measure(cg))
+        let context=PlanningContext(instruction:"高强度磨皮，瓷白肤色，大眼，但不要瘦脸，不要美白",analysis:analysis,preferences:EditingPreferences())
+        let r=try LocalRulePlanner().plan(context)
+        XCTAssertTrue(r.beauty.enabled);XCTAssertGreaterThan(r.beauty.intensiveSmoothing,0.5)
+        XCTAssertLessThan(r.beauty.texturePreservation,0.5);XCTAssertEqual(r.beauty.faceSlimming,0)
+        XCTAssertGreaterThan(r.beauty.eyeEnlargement,0.5);XCTAssertEqual(r.beauty.skinWhitening,0)
+        XCTAssertFalse(InstructionParser.parse(context.instruction).preserveTexture)
+        var manual=EditRecipe();manual.beauty=BeautyStyle.intensive.settings
+        let brightness=PlanningContext(instruction:"提亮一点",analysis:analysis,preferences:EditingPreferences(),currentRecipe:manual)
+        let gated=try IntentSafetyGate.enforce(manual,context:brightness)
+        XCTAssertEqual(gated.beauty,manual.beauty)
+        XCTAssertTrue(InstructionParser.parse("瘦脸，大眼").unavailableRequests.isEmpty)
+        let none=ImageAnalysis(image:cg,faceCount:0,metrics:try PixelMetrics.measure(cg))
+        XCTAssertFalse(try LocalRulePlanner().plan(PlanningContext(instruction:"高强度美颜",analysis:none,preferences:EditingPreferences())).beauty.enabled)
+    }
     func testStrictSchemaRejectsCommandsUnknownFieldsAndOutOfBounds() throws {
         let neutral=try EditRecipe().json()
         XCTAssertNoThrow(try ToolRegistry().decode(neutral))

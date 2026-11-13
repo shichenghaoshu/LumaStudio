@@ -4,6 +4,61 @@ import Vision
 import PhotoDomain
 @testable import BeautyEngine
 final class BeautyTests: XCTestCase {
+    func testBeautyStylesAreValidatedAndOldRecipesRetainDefaults() throws {
+        for style in BeautyStyle.allCases {
+            var r=EditRecipe();r.beauty=style.settings;try r.validateParameters()
+            let decoded=try JSONDecoder().decode(EditRecipe.self,from:JSONEncoder().encode(r))
+            XCTAssertEqual(decoded.beauty,r.beauty)
+        }
+        let old=try JSONDecoder().decode(BeautySettings.self,from:Data("{\"enabled\":true,\"strength\":0.5}".utf8))
+        XCTAssertEqual(old.intensiveSmoothing,0);XCTAssertEqual(old.faceSlimming,0);XCTAssertEqual(old.eyeEnlargement,0)
+        XCTAssertEqual(BeautyStyle.intensive.settings.texturePreservation,0)
+    }
+    func testRealPortraitIntensiveBeautyAndShapeProduceLocalPixels() throws {
+        guard let fixture=ProcessInfo.processInfo.environment["LUMA_PORTRAIT_FIXTURE"] else {throw XCTSkip("Real portrait fixture optional")}
+        let source=try XCTUnwrap(CIImage(contentsOf:URL(fileURLWithPath:fixture))),context=CIContext()
+        let scale=min(1,960/max(source.extent.width,source.extent.height))
+        let small=source.transformed(by:CGAffineTransform(scaleX:scale,y:scale))
+        let image=CIImage(cgImage:try XCTUnwrap(context.createCGImage(small,from:small.extent)))
+        let engine=try BeautyProcessor(),analysis=try engine.segmentation.analyze(image,context:context)
+        XCTAssertGreaterThan(analysis.faces.count,0)
+        XCTAssertNotNil(analysis.faces.first?.leftEye);XCTAssertNotNil(analysis.faces.first?.rightEye)
+        let w=Int(image.extent.width),h=Int(image.extent.height),space=CGColorSpace(name:CGColorSpace.sRGB)!
+        func pixels(_ ci: CIImage)->[UInt8] {var bytes=[UInt8](repeating:0,count:w*h*4);context.render(ci,toBitmap:&bytes,rowBytes:w*4,bounds:image.extent,format:.RGBA8,colorSpace:space);return bytes}
+        let original=pixels(image)
+        var mask=[UInt8](repeating:0,count:w*h)
+        context.render(analysis.mask,toBitmap:&mask,rowBytes:w,bounds:image.extent,format:.L8,colorSpace:nil)
+        var naturalDelta: Double=0,intensiveDelta: Double=0,whiteningDelta: Double=0,shapeChanges=0
+        for style in BeautyStyle.allCases {
+            let output=try engine.apply(image,settings:style.settings,analysis:analysis,context:context),bytes=pixels(output)
+            var delta: Double=0,white: Double=0,count=0,unmasked=0
+            for i in 0..<(w*h) {
+                let change=(0..<3).map{abs(Int(bytes[i*4+$0])-Int(original[i*4+$0]))}.max()!
+                if mask[i]>80 {delta += Double(change);white += Double(bytes[i*4])+Double(bytes[i*4+1])+Double(bytes[i*4+2])-Double(original[i*4])-Double(original[i*4+1])-Double(original[i*4+2]);count += 1}
+                if style != .reshape,mask[i]==0 {unmasked=max(unmasked,change)}
+                if style == .reshape,change>3 {shapeChanges += 1}
+            }
+            delta /= Double(max(1,count));white /= Double(max(1,count)*3)
+            if style == .natural {naturalDelta=delta}
+            if style == .intensive {intensiveDelta=delta}
+            if style == .porcelain {whiteningDelta=white}
+            if style != .reshape {XCTAssertLessThanOrEqual(unmasked,1,"\(style.title) must preserve unmasked background")}
+            if let evidence=ProcessInfo.processInfo.environment["LUMA_BEAUTY_EVIDENCE"] {
+                let folder=URL(fileURLWithPath:evidence);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+                try context.writePNGRepresentation(of:output,to:folder.appendingPathComponent("beauty-\(style.rawValue).png"),format:.RGBA8,colorSpace:space)
+                try context.writePNGRepresentation(of:image,to:folder.appendingPathComponent("beauty-original.png"),format:.RGBA8,colorSpace:space)
+            }
+        }
+        XCTAssertGreaterThan(intensiveDelta,naturalDelta+2)
+        XCTAssertGreaterThan(whiteningDelta,8)
+        XCTAssertGreaterThan(shapeChanges,100)
+        // Geometry is tested separately from smoothing and skin tone.
+        var geometry=BeautySettings();geometry.enabled=true;geometry.faceSlimming=1;geometry.eyeEnlargement=1
+        var neutral=geometry;neutral.faceSlimming=0;neutral.eyeEnlargement=0
+        let before=pixels(try engine.apply(image,settings:neutral,analysis:analysis,context:context))
+        let after=pixels(try engine.apply(image,settings:geometry,analysis:analysis,context:context))
+        XCTAssertGreaterThan(zip(before,after).filter{abs(Int($0)-Int($1))>3}.count,100)
+    }
     func testGuidedConstantPreserved() throws {
         let result=try GuidedFilter.apply(guide:[Float](repeating:0.4,count:64),input:[Float](repeating:0.7,count:64),width:8,height:8)
         XCTAssertTrue(result.allSatisfy{abs($0-0.7)<0.0001})

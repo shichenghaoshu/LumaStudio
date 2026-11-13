@@ -26,7 +26,7 @@ final class MetalPetalBeauty {
         let filter=MTIHighPassSkinSmoothingFilter()
         filter.inputImage=input
         filter.outputPixelFormat = .rgba16Float
-        filter.amount=settings.strength*settings.smoothing*max(0.25,1-(settings.texturePreservation-0.6)*1.3)
+        filter.amount=min(1,max(0,settings.strength*settings.smoothing*max(0.25,1-(settings.texturePreservation-0.6)*1.3)))
         filter.radius=Float(max(0.5,CGFloat(settings.radius)*max(image.extent.width,image.extent.height)/1600))
         // The upstream high-pass mask applies this gentle lift to skin texture.
         filter.toneCurveControlPoints=[MTIVector(values:[Float(0),0]),MTIVector(values:[Float(120)/255,Float(138)/255]),MTIVector(values:[Float(1),1])]

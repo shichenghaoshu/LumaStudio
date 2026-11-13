@@ -884,7 +884,7 @@
         },
         "texturePreservation": {
           "type": "number",
-          "minimum": 0.6,
+          "minimum": 0,
           "maximum": 1,
           "default": 0.94
         },
@@ -956,6 +956,36 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "intensiveSmoothing": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "skinWhitening": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "skinRosiness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "faceSlimming": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "eyeEnlargement": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
         }
       }
     },

@@ -96,18 +96,23 @@ class LumaNative {
     Float32List? lut,
     int dimension,
   ) {
+    if (bytes.length != w * h * 4 ||
+        ![18, 24].contains(settings.length) ||
+        hsl.length != 24) {
+      throw ArgumentError('Invalid native image or control count');
+    }
     final pixels = calloc<Uint8>(bytes.length),
-        p = calloc<Double>(18),
+        p = calloc<Double>(settings.length),
         hs = calloc<Double>(24);
     final cube = lut == null
         ? nullptr.cast<Float>()
         : calloc<Float>(lut.length);
     try {
       pixels.asTypedList(bytes.length).setAll(0, bytes);
-      p.asTypedList(18).setAll(0, settings);
+      p.asTypedList(settings.length).setAll(0, settings);
       hs.asTypedList(24).setAll(0, hsl);
       if (lut != null) cube.asTypedList(lut.length).setAll(0, lut);
-      if (_apply(pixels, w, h, p, 18, hs, cube, dimension) != 0) {
+      if (_apply(pixels, w, h, p, settings.length, hs, cube, dimension) != 0) {
         throw StateError(error);
       }
       return Uint8List.fromList(pixels.asTypedList(bytes.length));

@@ -135,11 +135,14 @@ struct ProInspectorView: View {
     private var portraitModule: some View {
         VStack(alignment:.leading,spacing:12) {
             HStack {Image(systemName:"person.crop.square");Text("人像美化").font(.system(size:13,weight:.semibold));Spacer();Text("\(model.faceCount) 张人脸").font(.caption).foregroundStyle(.secondary)}
-            Toggle("启用自然美颜",isOn:$model.recipe.beauty.enabled).toggleStyle(.switch).font(.caption).disabled(model.faceCount==0)
-            fold("skin","高低频磨皮",section:.portrait,ids:["beauty.strength","beauty.radius","beauty.smoothing","beauty.texturePreservation","beauty.detailRecovery","beauty.sharpness"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{["strength","radius","smoothing","texturePreservation","detailRecovery","sharpness"].contains(String($0.id.split(separator:".").last!))})}
+            Toggle("启用美颜",isOn:$model.recipe.beauty.enabled).toggleStyle(.switch).font(.caption)
+            HStack(spacing:5){ForEach(BeautyStyle.allCases,id:\.self){style in Button(style.title){model.applyBeautyStyle(style)}.font(.system(size:11)).frame(maxWidth:.infinity).buttonStyle(.bordered).accessibilityLabel("\(style.title)美颜预设")}}
+            Text("高强度可明显磨平纹理；塑形预设同时启用瘦脸与大眼。可整体撤销，未检测到人脸时不执行。").font(.caption2).foregroundStyle(.secondary)
+            fold("skin","高低频磨皮",section:.portrait,ids:["beauty.strength","beauty.radius","beauty.smoothing","beauty.texturePreservation","beauty.detailRecovery","beauty.sharpness","beauty.intensiveSmoothing"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{["strength","radius","smoothing","texturePreservation","detailRecovery","sharpness","intensiveSmoothing"].contains(String($0.id.split(separator:".").last!))})}
             fold("blemish","细小瑕疵弱化",section:.portrait,ids:["beauty.blemishRemoval","beauty.blemishThreshold"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{$0.id.contains("blemish")});Text("按局部红／暗变化弱化细小瑕疵，不能区分痣与痘痘。").font(.caption2).foregroundStyle(.secondary)}
             fold("skinTone","肤色调整",section:.portrait,ids:ParameterCatalog.section(.portrait).filter{$0.id.contains("skin") || $0.id.contains("toneUniformity") || $0.id.contains("shadowRepair")}.map(\.id),defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{$0.id.contains("skin") || $0.id.contains("toneUniformity") || $0.id.contains("shadowRepair")})}
-            Text("皮肤蒙版保护眼、眉、嘴等区域。眼齿美化、面部塑形和生成式重绘尚未接入。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            fold("faceShape","人脸塑形",section:.portrait,ids:["beauty.faceSlimming","beauty.eyeEnlargement"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{["beauty.faceSlimming","beauty.eyeEnlargement"].contains($0.id)});Text("基于 Vision 关键点进行局部像素变形，多人分别处理；大幅调整可能产生夸张效果。").font(.caption2).foregroundStyle(.secondary)}
+            Text("磨皮与肤色蒙版保护眼、眉、嘴；塑形单独调整眼睛与下半脸。牙齿专用美白和生成式重绘尚未接入。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
         }
     }
     private var styleModule: some View {
@@ -256,6 +259,13 @@ struct ProScalarRow: View {
     let reset: ()->Void
     @FocusState private var numberFocused: Bool
     private var display: Binding<Double> {Binding(get:{Double(value*scale+offset)},set:{n in let v=(Float(n)-offset)/scale;if v.isFinite{value=min(range.upperBound,max(range.lowerBound,v))}})}
+    // A stepped SwiftUI Slider creates a native tick for every step on macOS.
+    // Keep the native track continuous and quantize the value instead; large
+    // ranges must not allocate thousands of AppKit tick marks during layout.
+    private var sliderValue: Binding<Float> {Binding(get:{value},set:{v in
+        let snapped=range.lowerBound+((v-range.lowerBound)/step).rounded()*step
+        value=min(range.upperBound,max(range.lowerBound,snapped))
+    })}
     private var locked: Bool {ParameterLockPolicy.isLocked(id,in:model.recipe.document)}
     var body: some View {
         VStack(spacing:3) {
@@ -268,7 +278,10 @@ struct ProScalarRow: View {
                 Button{model.toggleParameterLock(id)}label:{Image(systemName:locked ? "lock.fill" : "lock.open").font(.system(size:9)).foregroundStyle(locked ? studioAccent : .secondary)}.buttonStyle(.plain).help("锁定只限制 AI，仍可手动调整").accessibilityLabel((locked ? "解锁" : "锁定")+title)
                 Button(action:reset){Image(systemName:"arrow.counterclockwise").font(.system(size:9))}.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("重置"+title)
             }.font(.system(size:11))
-            Slider(value:$value,in:range,step:step,onEditingChanged:{editing in if editing{model.beginParameterGesture()}else{model.endParameterGesture()}}).controlSize(.small).accessibilityLabel(title)
+            Slider(value:sliderValue,in:range,onEditingChanged:{editing in if editing{model.beginParameterGesture()}else{model.endParameterGesture()}}).controlSize(.small).accessibilityLabel(title)
+                .accessibilityAdjustableAction{direction in
+                    switch direction {case .increment:sliderValue.wrappedValue=value+step;case .decrement:sliderValue.wrappedValue=value-step;@unknown default:break}
+                }
         }.onChange(of:numberFocused){_,focused in if focused{model.beginParameterGesture()}else{model.endParameterGesture()}}
     }
 }

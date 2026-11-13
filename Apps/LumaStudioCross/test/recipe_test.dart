@@ -3,6 +3,29 @@ import 'package:lumastudio/recipe.dart';
 
 void main() {
   test(
+    'strong beauty styles preserve unrelated edits and all controls roundtrip',
+    () {
+      final original = Recipe().set(0, .6).setHSL(3, .2).copy(filter: 'warm');
+      for (final style in beautyStyles) {
+        final edited = beautyStyle(original, style);
+        expect(edited.values[0], .6);
+        expect(edited.hsl, original.hsl);
+        expect(edited.filter, 'warm');
+        expect(Recipe.fromJson(edited.toJson()), edited);
+      }
+      expect(controls.length + 24, 48);
+      final strong = beautyStyle(original, '高强度');
+      expect(strong.values[16], 1);
+      expect(strong.values[18], 0);
+      expect(strong.values[22], greaterThan(.5));
+      final limited = applyOnlineProposal(original, {
+        'changes': {'skinWhiten': .8, 'skinSmooth': .9},
+      }, '重度磨皮，但不要美白');
+      expect(limited.values[16], .9);
+      expect(limited.values[22], 0);
+    },
+  );
+  test(
     'online proposals preserve unmentioned edits and honor skin exclusions',
     () {
       final old = Recipe().set(11, .7).copy(filter: 'film');

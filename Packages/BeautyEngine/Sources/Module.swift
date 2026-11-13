@@ -8,11 +8,14 @@ public final class BeautyProcessor {
     private let textureKernel: CIColorKernel
     private let toneKernel: CIColorKernel
     private let detailKernel: CIColorKernel
+    private let intensiveKernel: CIColorKernel
+    private let shape: FaceShapeProcessor
     private let metalBeauty=MetalPetalBeauty()
     public private(set) var lastBackend="美颜未开启"
     public var metalPetalAvailable: Bool { metalBeauty.available }
     public init(modelURL: URL? = nil) throws {
         segmentation=SkinSegmentation(modelURL:modelURL)
+        shape=try FaceShapeProcessor()
         guard let texture=CIColorKernel(source:"""
         kernel vec4 lumaTexture(__sample original, __sample low, __sample smoothLow, float strength, float repair, float preservation, float threshold) {
             vec3 detail = original.rgb - low.rgb;
@@ -46,8 +49,20 @@ public final class BeautyProcessor {
             result=mix(result,low.rgb,repair*anomaly*0.18);
             return vec4(result,original.a);
         }
+        """),let intensive=CIColorKernel(source:"""
+        kernel vec4 lumaIntensive(__sample original, __sample soft, float smoothing, float whitening, float rosy) {
+            vec3 c=mix(original.rgb,soft.rgb,smoothing*0.97);
+            vec3 headroom=c-clamp(c,0.0,1.0);
+            vec3 porcelain=1.0-pow(1.0-clamp(c,0.0,1.0),vec3(1.8));
+            float y=dot(porcelain,vec3(0.2126,0.7152,0.0722));
+            porcelain=mix(vec3(y),porcelain,0.72)+headroom;
+            c=mix(c,porcelain,whitening);
+            float mid=smoothstep(0.04,0.25,dot(c,vec3(0.2126,0.7152,0.0722)));
+            c+=rosy*mid*vec3(0.12,-0.025,-0.015);
+            return vec4(c,original.a);
+        }
         """) else { throw LumaError.unsupported("Core Image 纹理内核编译失败") }
-        textureKernel=texture;toneKernel=tone;detailKernel=detail
+        textureKernel=texture;toneKernel=tone;detailKernel=detail;intensiveKernel=intensive
     }
     public func apply(_ image: CIImage, settings: BeautySettings, analysis: SkinAnalysis,context: CIContext?=nil) throws -> CIImage {
         guard settings.enabled,settings.strength>0,analysis.faceCount>0 else { lastBackend=analysis.faceCount>0 ? "美颜未开启" : "未检测到人脸，未执行美颜";return image }
@@ -80,6 +95,17 @@ public final class BeautyProcessor {
         if settings.skinSaturation != 1 {toned=toned.applyingFilter("CIColorControls",parameters:[kCIInputSaturationKey:settings.skinSaturation])}
         if settings.shadowRepair>0 {toned=toned.applyingFilter("CIHighlightShadowAdjust",parameters:["inputShadowAmount":settings.shadowRepair,"inputHighlightAmount":1])}
         if settings.sharpness>0 {toned=toned.applyingFilter("CISharpenLuminance",parameters:[kCIInputSharpnessKey:settings.sharpness*0.5])}
-        return toned.applyingFilter("CIBlendWithMask",parameters:[kCIInputBackgroundImageKey:image,kCIInputMaskImageKey:analysis.mask]).cropped(to:image.extent)
+        var mask=analysis.mask
+        if settings.intensiveSmoothing>0 || settings.skinWhitening>0 || settings.skinRosiness>0 {
+            let wide=toned.clampedToExtent().applyingFilter("CIGaussianBlur",parameters:[kCIInputRadiusKey:max(1,CGFloat(settings.radius)*0.65*scale)]).cropped(to:image.extent)
+            guard let strong=intensiveKernel.apply(extent:image.extent,arguments:[toned,wide,settings.intensiveSmoothing,settings.skinWhitening,settings.skinRosiness]) else {throw LumaError.invalidImage("强效美颜")}
+            toned=strong
+            let amount=CGFloat(settings.intensiveSmoothing*0.8),curve=CIVector(x:0,y:1+amount,z:-amount,w:0)
+            mask=mask.applyingFilter("CIColorPolynomial",parameters:["inputRedCoefficients":curve,"inputGreenCoefficients":curve,"inputBlueCoefficients":curve])
+            lastBackend += " + 强效磨皮／肤色"
+        }
+        let result=toned.applyingFilter("CIBlendWithMask",parameters:[kCIInputBackgroundImageKey:image,kCIInputMaskImageKey:mask]).cropped(to:image.extent)
+        if settings.faceSlimming>0 || settings.eyeEnlargement>0 {lastBackend += " + Vision 人脸塑形"}
+        return try shape.apply(result,settings:settings,faces:analysis.faces)
     }
 }

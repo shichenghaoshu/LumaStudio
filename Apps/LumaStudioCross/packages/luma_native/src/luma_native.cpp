@@ -26,7 +26,8 @@ RGB rgb(RGB c){float t=(c[0]-std::floor(c[0]))*6,f=t-int(t),p=c[2]*(1-c[1]),q=c[
 thread_local std::vector<double> previous;
 thread_local std::vector<float> old_lut,cube;
 void compile(const double* p,const double* hsl,const float* lut,int n){
- std::vector<double> key(p,p+18);key.insert(key.end(),hsl,hsl+24);key.push_back(n);size_t length=n?size_t(n)*n*n*3:0;
+ // Spatial beauty/detail controls do not invalidate the compiled color cube.
+ std::vector<double> key(p,p+11);key.push_back(p[15]);key.insert(key.end(),hsl,hsl+24);key.push_back(n);size_t length=n?size_t(n)*n*n*3:0;
  if(key==previous&&old_lut.size()==length&&(!length||std::equal(old_lut.begin(),old_lut.end(),lut)))return;
  constexpr int N=33;cube.resize(N*N*N*3);float exposure=std::exp2(float(p[0])),warm=std::log(float(p[7])/6500)*0.24f,tint=float(p[8])/150*0.08f;
  constexpr float centers[]={0,1.f/12,1.f/6,1.f/3,.5f,2.f/3,.75f,5.f/6};
@@ -49,21 +50,42 @@ std::vector<uint8_t> blur(const uint8_t* pixels,int w,int h,int radius){
 }
 }
 extern "C" {
-int luma_apply(uint8_t* pixels,int w,int h,const double* p,int count,const double* hsl,const float* lut,int n){
+int luma_apply(uint8_t* pixels,int w,int h,const double* parameters,int count,const double* hsl,const float* lut,int n){
  try{
-  if(!pixels||!p||!hsl||count!=18||w<1||h<1||uint64_t(w)*h>80000000||n<0||n==1||n>65||(n&&!lut))throw std::runtime_error("Invalid image/settings");
-  for(int i=0;i<18;i++)if(!std::isfinite(p[i]))throw std::runtime_error("Non-finite setting");for(int i=0;i<24;i++)if(!std::isfinite(hsl[i]))throw std::runtime_error("Non-finite HSL");
+  if(!pixels||!parameters||!hsl||(count!=18&&count!=24)||w<1||h<1||uint64_t(w)*h>80000000||n<0||n==1||n>65||(n&&!lut))throw std::runtime_error("Invalid image/settings");
+  std::array<double,24> values={0,1,0,0,0,0,0,6500,0,1,0,0,0,0,0,.8,0,0,1,1,0,0,0,0};
+  std::copy(parameters,parameters+count,values.begin());const double* p=values.data();
+  for(int i=0;i<24;i++)if(!std::isfinite(p[i])||!std::isfinite(hsl[i]))throw std::runtime_error("Non-finite setting");
   if(p[7]<1000||p[7]>50000||std::abs(p[0])>10)throw std::runtime_error("Unsafe parameter range");
   compile(p,hsl,lut,n);size_t length=size_t(w)*h;
   for(size_t i=0;i<length;i++){RGB c=sample(cube.data(),33,{pixels[i*4]/255.f,pixels[i*4+1]/255.f,pixels[i*4+2]/255.f});for(int k=0;k<3;k++)pixels[i*4+k]=uint8_t(std::lround(unit(c[k])*255));}
-  bool local=p[11]>0||p[12]>0||p[16]>0;std::vector<uint8_t> blurred;if(local)blurred=blur(pixels,w,h,std::clamp(std::min(w,h)/250,1,12));
+  if(p[18]<0||p[18]>1||p[19]<.5||p[19]>8||p[20]<0||p[20]>1||std::abs(p[21])>1||p[22]<0||p[22]>1||p[23]<0||p[23]>1)throw std::runtime_error("Unsafe beauty range");
+  int detailRadius=std::clamp(std::min(w,h)/250,1,12);
+  bool local=p[11]>0||p[12]>0,beauty=p[16]>0||p[20]>0;
+  if(!local&&!beauty&&p[13]==0&&p[14]==0&&p[17]==0&&p[21]==0&&p[22]==0&&p[23]==0){error.clear();return 0;}
+  std::vector<uint8_t> blurred,skinBlur;if(local)blurred=blur(pixels,w,h,detailRadius);
+  const uint8_t* soft=nullptr;
+  if(beauty){int radius=std::clamp(int(std::lround(detailRadius*p[19])),1,64);if(local&&radius==detailRadius)soft=blurred.data();else{skinBlur=blur(pixels,w,h,radius);soft=skinBlur.data();}}
   for(int y=0;y<h;y++)for(int x=0;x<w;x++){
    size_t i=size_t(y)*w+x;float r=pixels[i*4]/255.f,g=pixels[i*4+1]/255.f,b=pixels[i*4+2]/255.f;
    // This is a color range, not a face detector or a learned beauty model.
    float skin=(r>b*1.05f&&r>g&&r-g<.35f&&r>.18f)?std::min(1.f,(r-b)*5):0;
+   skin=unit(skin*(1+float(1-p[18])*2.5f));
    float nx=(x+.5f)/w*2-1,ny=(y+.5f)/h*2-1,vignette=1-float(p[13])*unit((nx*nx+ny*ny-.1f)*.55f);
    uint32_t z=uint32_t(i)*747796405u+2891336453u;z=((z>>((z>>28u)+4u))^z)*277803737u;z=(z>>22u)^z;float grain=(float(z&65535)/65535.f-.5f)*float(p[14])*80;
-   for(int k=0;k<3;k++){float v=pixels[i*4+k];if(local){float d=v-blurred[i*3+k],edge=std::max(0.f,1-std::abs(d)/35);v+=d*float(p[11])*.8f-d*edge*std::max(float(p[12])*.8f,skin*float(p[16])*.85f);}v+=skin*float(p[17])*12;pixels[i*4+k]=uint8_t(std::lround(std::clamp(v*vignette+grain,0.f,255.f)));}
+   RGB output={r,g,b};
+   float lowY=beauty?(.2126f*soft[i*3]+.7152f*soft[i*3+1]+.0722f*soft[i*3+2])/255.f:0;
+   float y0=.2126f*r+.7152f*g+.0722f*b;
+   for(int k=0;k<3;k++){
+    float v=pixels[i*4+k];
+    if(local){float d=v-blurred[i*3+k],edge=std::max(0.f,1-std::abs(d)/35);v+=d*float(p[11])*.8f-d*edge*float(p[12])*.8f;}
+    if(beauty){float d=v-soft[i*3+k],edge=std::max(0.f,1-std::abs(d)/(35+float(1-p[18])*110));v-=d*edge*skin*float(p[16])*.97f;v+=skin*float(p[20])*((soft[i*3+k]/255.f-lowY)-(output[k]-y0))*255;}
+    v+=skin*float(p[17])*32;output[k]=v/255.f;
+   }
+   output[0]+=skin*float(p[21])*.065f;output[2]-=skin*float(p[21])*.065f;
+   if(skin>0&&p[22]>0){RGB white=output;for(auto& v:white)v=1-std::pow(1-unit(v),1.8f);float wy=.2126f*white[0]+.7152f*white[1]+.0722f*white[2];for(auto& v:white)v=wy+(v-wy)*.72f;output=mix(output,white,skin*float(p[22]));}
+   output[0]+=skin*float(p[23])*.12f;output[1]-=skin*float(p[23])*.025f;output[2]-=skin*float(p[23])*.015f;
+   for(int k=0;k<3;k++)pixels[i*4+k]=uint8_t(std::lround(std::clamp(output[k]*255*vignette+grain,0.f,255.f)));
   }error.clear();return 0;
  }catch(const std::exception& e){error=e.what();return -1;}catch(...){error="Native processing failed";return -1;}
 }

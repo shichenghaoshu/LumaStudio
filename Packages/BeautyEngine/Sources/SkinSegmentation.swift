@@ -8,6 +8,18 @@ public struct SkinAnalysis {
     public let mask: CIImage
     public let faceCount: Int
     public let backend: String
+    public let faces: [FaceFeatures]
+    public init(mask: CIImage,faceCount: Int,backend: String,faces: [FaceFeatures]=[]) {
+        self.mask=mask;self.faceCount=faceCount;self.backend=backend;self.faces=faces
+    }
+}
+public struct FaceFeatures {
+    public let bounds: CGRect
+    public let leftEye: CGPoint?
+    public let rightEye: CGPoint?
+    public init(bounds: CGRect,leftEye: CGPoint?=nil,rightEye: CGPoint?=nil) {
+        self.bounds=bounds;self.leftEye=leftEye;self.rightEye=rightEye
+    }
 }
 /// No unlicensed weights are bundled. A validated single-channel probability Core ML
 /// model can be loaded locally; landmarks + adaptive color remain the safe fallback.
@@ -68,12 +80,21 @@ public final class SkinSegmentation {
                 let nx=(point.x-box.midX)/(box.width*0.49), ny=(point.y-(box.midY+box.height*0.03))/(box.height*0.61)
                 let ellipse=nx*nx+ny*ny
                 let neck=point.y<box.minY+box.height*0.08 && point.y>box.minY-box.height*0.28 && abs(point.x-box.midX)<box.width*0.28
-                guard (ellipse<1 || neck), !face.excluded.contains(where:{$0.contains(point)}), l>0.025,l<0.985 else { continue }
+                guard (ellipse<1 || neck),l>0.025,l<0.985 else { continue }
+                func smooth(_ value: CGFloat)->Float {let t=min(1,max(0,Float(value)));return t*t*(3-2*t)}
+                var protected: Float=1
+                for feature in face.excluded {
+                    let fx=(point.x-feature.midX)/max(0.0001,feature.width*0.6)
+                    let fy=(point.y-feature.midY)/max(0.0001,feature.height*0.7)
+                    protected *= smooth((sqrt(fx*fx+fy*fy)-0.75)/0.65)
+                }
+                guard protected>0 else {continue}
                 let cb = -0.168736*r-0.331264*g+0.5*b, cr=0.5*r-0.418688*g-0.081312*b
                 let chroma=exp(-pow((cb-face.cb)/0.11,2)-pow((cr-face.cr)/0.13,2))
                 let warm: Float = r>b*0.82 && cr > -0.025 ? 1 : 0.15
-                let feather=neck ? 0.5 : min(1,max(0,Float((1-ellipse)*7)))
-                mask[i]=max(mask[i],chroma*warm*feather)
+                let faceFeather=smooth((1-ellipse)*6)
+                let neckFeather=neck ? 0.5*smooth((1-abs(point.x-box.midX)/(box.width*0.28))*3)*smooth((point.y-box.minY+box.height*0.28)/(box.height*0.12)) : 0
+                mask[i]=max(mask[i],chroma*warm*max(faceFeather,neckFeather)*protected)
             }
         } }
         var backend=modelStatus
@@ -95,6 +116,15 @@ public final class SkinSegmentation {
         let bytes=refined.indices.map { UInt8(min(255,max(0,mask[$0] == 0 ? 0 : refined[$0]*255))) }
         let maskImage=CIImage(bitmapData:Data(bytes),bytesPerRow:w,size:CGSize(width:w,height:h),format:.L8,colorSpace:nil)
             .transformed(by:CGAffineTransform(scaleX:extent.width/CGFloat(w),y:extent.height/CGFloat(h))).cropped(to:extent)
-        return SkinAnalysis(mask:maskImage,faceCount:faces.count,backend:backend)
+        let features=faces.map { face -> FaceFeatures in
+            func center(_ region: VNFaceLandmarkRegion2D?) -> CGPoint? {
+                guard let points=region?.normalizedPoints,!points.isEmpty else {return nil}
+                let x=points.map{CGFloat($0.x)}.reduce(0,+)/CGFloat(points.count)
+                let y=points.map{CGFloat($0.y)}.reduce(0,+)/CGFloat(points.count)
+                return CGPoint(x:face.boundingBox.minX+x*face.boundingBox.width,y:face.boundingBox.minY+y*face.boundingBox.height)
+            }
+            return FaceFeatures(bounds:face.boundingBox,leftEye:center(face.landmarks?.leftEye),rightEye:center(face.landmarks?.rightEye))
+        }
+        return SkinAnalysis(mask:maskImage,faceCount:faces.count,backend:backend,faces:features)
     }
 }

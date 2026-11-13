@@ -39,7 +39,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
     public func plan(_ context: PlanningContext) async throws -> AgentPlan {
         let start=Date()
         let schema=String(decoding:try JSONSerialization.data(withJSONObject:JSONSerialization.jsonObject(with:RecipeSchema.data)),as:UTF8.self)
-        let system="You are LumaStudio's bounded photo parameter planner. Return only a version:2 JSON field patch matching this schema: include only parameters requested by the user. Omitted fields retain current_recipe. Never output code, file paths, shell commands or unsupported tools. Use the user's instruction and image analysis. Preserve unrelated parameters and lockedParameters; locked fields will be restored by the app. RAW parameters require a RAW source. No face: disable beauty. Never beautify if forbidden. Skin texture preservation at least 0.90. Supported masks: face,skin,subject,background,brush; never invent brush points. Hair/sky unavailable. operations must be []. Schema: "+schema
+        let system="You are LumaStudio's bounded photo parameter planner. Return only a version:2 JSON field patch matching this schema: include only parameters requested by the user. Omitted fields retain current_recipe. Never output code, file paths, shell commands or unsupported tools. Use the user's instruction and image analysis. Preserve unrelated parameters and lockedParameters; locked fields will be restored by the app. RAW parameters require a RAW source. No face: disable beauty. Never beautify if forbidden. Prefer texture preservation 0.90 for natural retouch. Explicit intensive, porcelain or glamour requests may reduce preservation to 0 and use the advertised beauty and face geometry controls. Supported masks: face,skin,subject,background,brush; never invent brush points. Hair/sky unavailable. operations must be []. Schema: "+schema
         let current=context.currentRecipe.flatMap{try? $0.json()}.map{String(decoding:$0,as:UTF8.self)} ?? "null"
         let analysis=String(decoding:try JSONEncoder().encode(context.analysis),as:UTF8.self)
         let user="instruction: \(context.instruction)\nanalysis: \(analysis)\nsource_format: \(context.sourceFormat ?? "unknown")\navailable_RAW_parameters: \(context.availableRAWParameters?.joined(separator:",") ?? "unknown; use global adjustments")\ncurrent_recipe: \(current)\nreference_profile_id: \(context.referenceProfileID ?? "none")\nPrevious instructions: \(context.previousInstructions.suffix(3).joined(separator:"; "))"
@@ -49,7 +49,6 @@ public struct OnlineAgentPlanner: AgentPlanner {
         let decoded=try ToolRegistry().proposal(Data(output.utf8),preserving:context.currentRecipe)
         var recipe=try IntentSafetyGate.enforce(decoded,context:context)
         if context.analysis.faceCount==0 || InstructionParser.parse(context.instruction).beautyForbidden { recipe.beauty.enabled=false }
-        recipe.beauty.texturePreservation=max(0.9,recipe.beauty.texturePreservation)
         recipe.operations=[];try ToolRegistry().validate(recipe)
         return AgentPlan(recipe:recipe,source:"在线 · \(settings.provider.title) / \(settings.model)",planningMilliseconds:Date().timeIntervalSince(start)*1000)
     }

@@ -646,6 +646,22 @@ class _StudioPageState extends State<StudioPage> {
                       ),
                     ),
                   ),
+                if (section == '肤色')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: [
+                        for (final style in beautyStyles)
+                          OutlinedButton(
+                            onPressed: () =>
+                                s.change(beautyStyle(s.recipe, style)),
+                            child: Text(style),
+                          ),
+                      ],
+                    ),
+                  ),
                 for (final e in controls.indexed.where(
                   (e) => e.$2.section == section,
                 ))

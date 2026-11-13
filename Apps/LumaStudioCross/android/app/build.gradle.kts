@@ -8,6 +8,7 @@ android {
     namespace = "studio.luma.lumastudio"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    testBuildType = "release"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -17,6 +18,10 @@ android {
     defaultConfig {
         // Stable application identity for release updates.
         applicationId = "studio.luma.lumastudio"
+        ndk {
+            abiFilters.clear()
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -27,12 +32,14 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             // Distribution APKs are signed after build with the private release key.
             signingConfig = null
+            proguardFiles("release-instrumentation.pro")
         }
     }
 }
@@ -45,4 +52,11 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestCompileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
 }

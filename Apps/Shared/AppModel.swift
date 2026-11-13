@@ -322,8 +322,11 @@ import PhotoCore
         let complete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             if response == .OK { self?.handleImport(.success(panel.urls)) }
         }
-        if let window=NSApp.keyWindow { panel.beginSheetModal(for:window,completionHandler:complete) }
-        else { panel.begin(completionHandler:complete) }
+        NSApp.activate(ignoringOtherApps:true)
+        if let window=NSApp.keyWindow ?? NSApp.mainWindow {
+            window.makeKeyAndOrderFront(nil)
+            panel.beginSheetModal(for:window,completionHandler:complete)
+        } else { panel.begin(completionHandler:complete) }
         #else
         importerPresented=true
         #endif
@@ -391,6 +394,10 @@ import PhotoCore
         if !failures.isEmpty { message=failures.prefix(6).joined(separator:"\n") }
     }
     func oneClickBeauty() { recipe.beauty.enabled=true }
+    func applyBeautyStyle(_ style: BeautyStyle) {
+        endParameterGesture()
+        recipe.beauty=style.settings
+    }
     func reset() { profile=nil;recipe=Recipe() }
     func removeReference() { profile=nil;recipe.color.referenceProfileID=nil }
     func loadRecipe(_ url: URL) throws {
