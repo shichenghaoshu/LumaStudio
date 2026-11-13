@@ -45,7 +45,14 @@ jobs:
         working-directory: Apps/LumaStudioCross
         run: |
           Remove-Item Env:LUMA_NATIVE_LIBRARY -ErrorAction SilentlyContinue
-          flutter test integration_test/editor_test.dart -d windows
+          flutter test integration_test/editor_test.dart -d windows --verbose 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/windows-ui-test.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-UI-validation-log
+          path: ${{ runner.temp }}/windows-ui-test.log
+          if-no-files-found: ignore
       - name: Run the compiled Windows application self-test
         run: |
           Remove-Item Env:LUMA_NATIVE_LIBRARY -ErrorAction SilentlyContinue
