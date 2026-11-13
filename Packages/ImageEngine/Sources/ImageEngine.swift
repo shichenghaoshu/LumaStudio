@@ -26,6 +26,6 @@ public actor NativeImageEngine: ImageEngine {
     public func preview(_ asset: PhotoAsset,recipe: EditRecipe) async throws -> RenderResult { try await perform(asset,recipe:recipe,tier:.preview) }
     private func perform(_ asset: PhotoAsset,recipe: EditRecipe,tier: RenderTier) async throws -> RenderResult {
         try registry.validate(recipe);try Task.checkCancellation()
-        return try await processor.render(url:asset.originalURL,recipe:recipe.legacyRecipe(raw:raw),tier:tier,profile:profile)
+        return try await processor.render(url:asset.originalURL,recipe:recipe.legacyRecipe(),tier:tier,profile:profile)
     }
 }

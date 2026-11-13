@@ -8,9 +8,13 @@ public enum RecipeSchema {
         return try Data(contentsOf:u)
     } }
     public static func validate(_ data: Data) throws {
-        guard data.count<=64*1024 else { throw LumaError.corruptData("编辑计划超过 64KB") }
+        guard data.count<=512*1024 else { throw LumaError.corruptData("编辑计划超过 512KB") }
         let value=try JSONSerialization.jsonObject(with:data,options:.fragmentsAllowed)
-        let schema=try JSONSerialization.jsonObject(with:Self.data) as! [String:Any]
+        let schemaData: Data
+        if let object=value as? [String:Any],object["version"] as? Int==1,
+           let legacy=Bundle.module.url(forResource:"edit-recipe-v1.schema",withExtension:"json") { schemaData=try Data(contentsOf:legacy) }
+        else { schemaData=try Self.data }
+        let schema=try JSONSerialization.jsonObject(with:schemaData) as! [String:Any]
         try check(value,schema:schema,path:"recipe",depth:0)
     }
     private static func check(_ v: Any,schema s: [String:Any],path: String,depth: Int) throws {

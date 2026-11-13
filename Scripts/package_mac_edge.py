@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Package the verified Mac build and source. Preserve old Pad/0.1 artifacts as legacy."""
+"""Package the Mac release whose binary has passed native UI acceptance.
+
+Source and evidence stay separate. Replacing the current delivery preserves it in
+Legacy-VERSION; no user library, credentials, photographs or model weights enter source.
+"""
 from pathlib import Path
+import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import plistlib
@@ -12,85 +18,97 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/"Deliverables"
+OUT=ROOT/'Deliverables'
 
 def sha(path):
-    with path.open("rb") as stream:return hashlib.file_digest(stream,"sha256").hexdigest()
+    with path.open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
+
+def run(*args):
+    subprocess.run(list(map(str,args)),check=True,stdout=subprocess.DEVNULL)
 
 def archive_source(destination):
-    allowed=["Package.swift","Package.resolved","README.md",".gitignore",".github","LumaStudio.xcodeproj","Apps","Packages","Resources","Tests","Tools","Scripts","Documentation","Training","Vendor/llama-runtime.xcframework","Vendor/llama-LICENSE.txt","Vendor/Notices","Vendor/runtime-provenance.json","Models/manifests"]
-    excluded={".venv","__pycache__",".DS_Store","xcuserdata"}
-    with zipfile.ZipFile(destination,"w",zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
-        for name in allowed:
-            root=ROOT/name
-            for path in sorted(root.rglob("*") if root.is_dir() else [root]):
-                if excluded.intersection(path.parts) or path.suffix in [".pyc",".gguf",".pdf",".docx"] or any(part in {"data","outputs"} for part in path.relative_to(ROOT).parts[:2]) or path.name.startswith(".env"):continue
-                relative="LumaStudio/"+path.relative_to(ROOT).as_posix()
+    spec=importlib.util.spec_from_file_location('source_audit',ROOT/'Scripts/prepare_github.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);module.audit()
+    excluded={'.venv','__pycache__','.DS_Store','xcuserdata'}
+    with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
+        for name in module.ALLOWED:
+            start=ROOT/name
+            for path in sorted(start.rglob('*') if start.is_dir() else [start]):
+                if excluded.intersection(path.parts) or path.suffix in ('.pyc','.gguf','.pdf','.docx') or path.name.startswith('.env') or any(p in {'data','outputs'} for p in path.relative_to(ROOT).parts[:2]):continue
+                relative='LumaStudio/'+path.relative_to(ROOT).as_posix()
                 if path.is_symlink():
+                    if not path.resolve().is_relative_to(ROOT):raise RuntimeError('Out-of-workspace symlink')
                     info=zipfile.ZipInfo(relative);info.create_system=3;info.external_attr=(stat.S_IFLNK|0o777)<<16
                     archive.writestr(info,os.readlink(path))
                 elif path.is_file():archive.write(path,relative)
 
 def main():
-    build=(ROOT/"Artifacts/integrations-mac-build.log").read_text()
-    tests=(ROOT/"Artifacts/integrations-tests.log").read_text()
-    if "** BUILD SUCCEEDED **" not in build or "** BUILD FAILED **" in build:raise RuntimeError("Mac build not verified")
-    if "Executed 60 tests, with 0 failures" not in tests or "unexpected signal" in tests:raise RuntimeError("Current shared checks not passed")
-    stdio=(ROOT/"Artifacts/integrations-stdio-tests.log").read_text()
-    if "Ran 3 tests" not in stdio or not stdio.rstrip().endswith("OK"):raise RuntimeError("Voice stdio checks not passed")
-    acceptance=json.loads((ROOT/"Artifacts/integrations-acceptance.json").read_text())
-    if acceptance.get("status")!="passed":raise RuntimeError("Current UI acceptance not passed")
-    stage=ROOT/"work/delivery-mac-edge"
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--app',type=Path,default=ROOT/'work/WorkflowReleaseData/Build/Products/Release/LumaStudioMac.app')
+    args=parser.parse_args()
+    source=args.app.resolve()
+    info=plistlib.loads((source/'Contents/Info.plist').read_bytes())
+    configured=plistlib.loads((ROOT/'Apps/LumaStudioMac/Info.plist').read_bytes())
+    if any(info[k]!=configured[k] for k in ('CFBundleShortVersionString','CFBundleVersion')):raise RuntimeError('Built application version differs from source')
+    version=info['CFBundleShortVersionString'];binary=source/'Contents/MacOS/LumaStudioMac'
+    acceptance=json.loads((ROOT/'Artifacts/final-acceptance.json').read_text())
+    if acceptance.get('status')!='passed' or acceptance.get('version')!=version or acceptance.get('executable_sha256')!=sha(binary):raise RuntimeError('UI acceptance does not match this binary')
+    build=(ROOT/'Artifacts/final-mac-build.log').read_text()
+    tests=(ROOT/'Artifacts/final-all-tests.log').read_text()
+    if '** BUILD SUCCEEDED **' not in build or '** BUILD FAILED **' in build:raise RuntimeError('Release build not passed')
+    summaries=re.findall(r'Executed (\d+) tests, with (\d+) tests skipped and (\d+) failures|Executed (\d+) tests, with (\d+) failures',tests)
+    if not summaries or any(s in tests for s in ('unexpected signal','Test Suite \'All tests\' failed','error:')):raise RuntimeError('Shared tests not passed')
+    last=summaries[-1];executed=int(last[0] or last[3]);skipped=int(last[1] or 0);failures=int(last[2] or last[4])
+    if executed<89 or failures:raise RuntimeError('Incomplete shared test suite')
+    if skipped:
+        supplemental=(ROOT/'Artifacts/final-legacy-test.log').read_text()
+        if skipped!=1 or 'testPreReviewDatabaseMigratesWithoutLosingPhotoOrRecipe' not in supplemental or 'Executed 1 test, with 0 failures' not in supplemental:raise RuntimeError('Skipped fixture check needs a passing supplemental run')
+    stdio=(ROOT/'Artifacts/pro-stdio-tests.log').read_text()
+    training=(ROOT/'Artifacts/pro-training-regression.log').read_text()
+    if 'Ran 3 tests' not in stdio or not stdio.rstrip().endswith('OK'):raise RuntimeError('Voice stdio tests not passed')
+    if 'Ran 6 tests' not in training or not training.rstrip().endswith('OK'):raise RuntimeError('Training pipeline regression not passed')
+    intent=(ROOT/'Artifacts/final-intent-test.log').read_text()
+    if "Test Case '-[AgentTests.AgentTests testInstructionNegationAndLocalIntent]' passed" not in intent:raise RuntimeError('Final instruction parser regression not passed')
+    stage=ROOT/'work/final-delivery-stage'
     if stage.exists():shutil.rmtree(stage)
     stage.mkdir(parents=True)
-    source=ROOT/"ReleaseData/Build/Products/Release/LumaStudioMac.app"
-    app=stage/"LumaStudio.app"
-    subprocess.run(["ditto",str(source),str(app)],check=True)
-    subprocess.run(["codesign","--verify","--deep","--strict",str(app)],check=True)
-    version=plistlib.loads((app/"Contents/Info.plist").read_bytes())["CFBundleShortVersionString"]
-    if version!="0.3.0" or acceptance.get("version")!=version:raise RuntimeError("Wrong app version")
-    binary=app/"Contents/MacOS/LumaStudioMac"
-    if acceptance.get("executable_sha256")!=sha(binary):raise RuntimeError("UI acceptance does not match current executable")
-    subprocess.run(["ditto","-c","-k","--sequesterRsrc","--keepParent",str(app),str(stage/"LumaStudio-macOS.zip")],check=True)
-    archive_source(stage/"LumaStudio-source.zip")
-    evidence=["agent-process-build.log","agent-process-tests.log","agent-process-acceptance.json","agent-process-empty.png","agent-process-running.png","agent-process-result.png","agent-process-comparison.png","agent-process-plan.png","agent-process-compact.png","agent-process-cancelled.png","agent-process-ax.txt","agent-process-export-ax.txt","mac-ui-build.log","mac-ui-acceptance.json","mac-ui-before.png","mac-ui-editor.png","mac-ui-compare.png","mac-ui-compact.png","mac-ui-portrait.png","mac-ui-recipe.png","mac-ui-assistant.png","mac-ui-raw.png","mac-ui-batch.png","mac-ui-batch-ax.txt","mac-ui-export-ax.txt","mac-ui-assistant-ax.txt","edge-tests-acceptance.log","edge-agent-tests-latest.log","edge-release-mac.log","edge-release-package.log","training-tests.log","training-sft-smoke.log","training-preflight.json","teacher-workflow.log","TeacherWorkflow/summary.json","TrainingSmoke/SMOKE-RESULT.json","EdgeOfflineFinal/measurement.json","EdgeOfflineFinal/stdout.json","EdgeOfflineFinal/stderr.log"]
-    evidence += [p.relative_to(ROOT/"Artifacts").as_posix() for p in sorted((ROOT/"Artifacts").glob("integrations-*")) if p.is_file()]
-    evidence += [p.relative_to(ROOT/"Artifacts").as_posix() for p in sorted((ROOT/"Artifacts/IntegrationsBeauty").glob("*")) if p.is_file()]
-    with zipfile.ZipFile(stage/"LumaStudio-validation.zip","w",zipfile.ZIP_DEFLATED) as archive:
-        for item in evidence:
-            path=ROOT/"Artifacts"/item
-            if path.is_file():archive.write(path,"Artifacts/"+item)
-    manual="""# LumaStudio Mac 0.3.0
-
-打开 LumaStudio.app，导入照片。右侧有调色／人像／配方／助手面板；画布可缩放、原图对照，顶部可打开 Agent 处理过程。处理完成后由你确认导出，原片始终保留。新增美颜使用真实 MetalPetal GPU 算法，结合皮肤区域和纹理保护，不是训练好的商业精修网络。
-
-左侧「接入 → 在线模型」可选择通义、DeepSeek、OpenAI 或兼容服务：填写 Base URL、模型 ID、自己的密钥，保存并测试，再切换为在线模型。密钥只进系统钥匙串；默认不上传照片，可主动开启 512 像素小预览。当前本机未配置真实付费服务密钥。
-
-「接入 → 语音与小智」可保存自己的小智 MCP 接入点并连接；默认语音文字进入待处理列表。也可启动仅本机的认证 HTTP 接口，复制端口和令牌供其他语音 AI 使用。助手及处理过程有 Mac 麦克风听写按钮，默认设备端识别。完整说明、请求例子和 stdio 接法见源码 Documentation/INTEGRATIONS.md；真人朗读与官方小智服务尚未实连验收。
-
-本机已有 Qwen 1.5B 基础模型；源码和 App 压缩包不含约 986 MB 权重。没有本地模型时可用规则，或配置自己的在线模型。App 核心功能无需 Python／Ollama。Qwen 基础模型没有完成 LumaStudio 专业蒸馏。
-
-私有源码仓库：https://github.com/shichenghaoshu/LumaStudio 。不包含商业计划书、逆向目录、私有照片、密钥或 GGUF 权重。训练入口见 Training/README.md；正式 1.5B／3B 训练、Jarvis 对照基准和专业盲评未执行。
-
-本包是 macOS 14+ Apple Silicon 本机临时签名开发版，未经 Developer ID 公证。iPad 暂缓，G9 实机尚未验收。60 项 Swift 测试、3 项 stdio 协议测试和真实人像导出已通过；在线模型／小智界面检查使用本机协议测试服务，不代表真实供应商或语音硬件验收。
-"""
-    (stage/"使用说明.md").write_text(manual)
-    lines=["LumaStudio Mac 0.3.0 (5) · local development delivery · 2026-11-12","macOS 14+ arm64; local ad-hoc signature; no Developer ID notarization","Current Mac Release: SUCCEEDED; current native UI acceptance: passed","Current shared Swift checks: 60 / 0 failures; stdio MCP protocol: 3 / 0 failures","Actual MetalPetal GPU portrait + exposure/warmth regression and 2615x3269 JPEG export passed","Cloud API / XiaoZhi UI: LOCAL protocol fixtures; real paid API, official XiaoZhi and physical speech quality: NOT RUN","Prior training checks: 6 passed; synthetic tiny SFT smoke: 2 steps; product Student models trained: 0","Source: https://github.com/shichenghaoshu/LumaStudio (private); source excludes photos, research and weights","iPad deferred; legacy Pad artifacts are not part of this delivery",""]
-    for path in sorted(stage.glob("*.zip")):lines.append(f"{path.name}: {path.stat().st_size} bytes; SHA256 {sha(path)}")
-    binary=app/"Contents/MacOS/LumaStudioMac";lines.extend(["",f"Mac executable SHA256: {sha(binary)}","Model weights are separate; existing local Qwen base is NOT a trained LumaStudio Student."])
-    (stage/"MANIFEST.txt").write_text("\n".join(lines)+"\n")
+    app=stage/'LumaStudio.app';run('ditto',source,app);run('codesign','--verify','--deep','--strict',app)
+    run('ditto','-c','-k','--sequesterRsrc','--keepParent',app,stage/'LumaStudio-macOS.zip')
+    archive_source(stage/'LumaStudio-source.zip')
+    evidence=[ROOT/'Artifacts'/name for name in ('final-mac-build.log','final-all-tests.log','final-legacy-test.log','final-postfix-tests.log','final-intent-test.log','final-acceptance.json','final-source-audit.log','pro-stdio-tests.log','pro-training-regression.log')]
+    for folder in ('FinalRelease','ProEditor'):
+        evidence += [p for p in (ROOT/'Artifacts'/folder).rglob('*') if p.is_file() and p.suffix.lower() in ('.json','.png','.jpg','.jpeg','.txt','.log')]
+    with zipfile.ZipFile(stage/'LumaStudio-validation.zip','w',zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(set(evidence)):
+            if path.is_file():archive.write(path,'Artifacts/'+path.relative_to(ROOT/'Artifacts').as_posix())
+    manual=(ROOT/'Documentation/RELEASE_0.4.2.md').read_text()
+    (stage/'使用说明.md').write_text(manual)
+    manifest={'version':version,'build':info['CFBundleVersion'],'platform':'macOS 14+, Apple Silicon arm64','signature':'local ad-hoc; no Developer ID notarization','executable_sha256':sha(app/'Contents/MacOS/LumaStudioMac'),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'ui_acceptance':acceptance,'shared_tests':{'executed':executed,'failures':failures,'skipped_in_full_run':skipped,'supplemental_legacy_fixture_passed':bool(skipped)},'voice_stdio_tests':3,'training_pipeline_regression_tests':6,'trained_product_models':0,'archives':{p.name:{'bytes':p.stat().st_size,'sha256':sha(p)} for p in sorted(stage.glob('*.zip'))}}
+    check=ROOT/'work/final-delivery-extraction'
+    if check.exists():shutil.rmtree(check)
+    check.mkdir(parents=True)
+    run('ditto','-x','-k',stage/'LumaStudio-macOS.zip',check)
+    extracted=check/'LumaStudio.app';run('codesign','--verify','--deep','--strict',extracted)
+    if sha(extracted/'Contents/MacOS/LumaStudioMac')!=manifest['executable_sha256']:raise RuntimeError('Extracted application differs')
+    manifest['extracted_signature_and_binary_match']=True
+    (stage/'MANIFEST.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     OUT.mkdir(exist_ok=True)
-    previous=OUT/"LumaStudio.app/Contents/Info.plist"
-    old_version=plistlib.loads(previous.read_bytes()).get("CFBundleShortVersionString","unknown") if previous.exists() else "unknown"
-    legacy=OUT/("Legacy-"+old_version);legacy.mkdir(exist_ok=True)
-    for path in list(stage.iterdir()):
-        destination=OUT/path.name
+    old=OUT/'LumaStudio.app/Contents/Info.plist'
+    old_version=plistlib.loads(old.read_bytes())['CFBundleShortVersionString'] if old.exists() else 'previous'
+    legacy=OUT/('Legacy-'+old_version)
+    if any((OUT/p.name).exists() for p in stage.iterdir()):legacy.mkdir(exist_ok=True)
+    old_manifest=OUT/'MANIFEST.txt'
+    if old_manifest.exists():
+        legacy.mkdir(exist_ok=True)
+        if (legacy/old_manifest.name).exists():raise RuntimeError('Preserved manifest already exists')
+        old_manifest.rename(legacy/old_manifest.name)
+    for p in stage.iterdir():
+        destination=OUT/p.name
         if destination.exists():
-            saved=legacy/path.name
-            if not saved.exists():destination.rename(saved)
-            elif destination.is_dir():shutil.rmtree(destination)
-            else:destination.unlink()
-        path.rename(destination)
-    print("\n".join(lines))
+            saved=legacy/p.name
+            if saved.exists():raise RuntimeError('Preserved delivery already exists: '+str(saved))
+            destination.rename(saved)
+        p.rename(destination)
+    print(json.dumps({k:manifest[k] for k in ('version','build','executable_sha256','source_commit','archives','extracted_signature_and_binary_match')},ensure_ascii=False,indent=2))
 
-if __name__=="__main__":main()
+if __name__=='__main__':main()

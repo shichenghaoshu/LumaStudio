@@ -23,7 +23,7 @@ public actor NativeAgentPlanner: AgentPlanner {
                     return try engine.generate(prompt:Self.prompt(context),grammar:EditRecipeGrammar.make(),signal:signal)
                 },onCancel:{signal.cancel()})
                 try Task.checkCancellation()
-                let decoded=try ToolRegistry().decode(Data(raw.utf8))
+                let decoded=try ToolRegistry().proposal(Data(raw.utf8),preserving:context.currentRecipe)
                 var recipe=try IntentSafetyGate.enforce(decoded,context:context)
                 let intent=InstructionParser.parse(context.instruction)
                 if let region=intent.requestedLocalRegion,!recipe.masks.contains(where:{$0.kind==region}) { throw LumaError.corruptData("模型没有保留指令要求的局部区域") }
@@ -43,8 +43,8 @@ public actor NativeAgentPlanner: AgentPlanner {
         return AgentPlan(recipe:recipe,source:"本地规则 + Vision",fallbackReason:failure,planningMilliseconds:Date().timeIntervalSince(start)*1000)
     }
     public static func prompt(_ c: PlanningContext)->String {
-        let current=c.currentRecipe.flatMap{try? JSONEncoder().encode($0)}.flatMap{String(data:$0,encoding:.utf8)} ?? "null"
-        let draft=(try? LocalRulePlanner().plan(c)).flatMap{try? JSONEncoder().encode($0)}.flatMap{String(data:$0,encoding:.utf8)} ?? "null"
+        let current=c.currentRecipe.map{compactPromptRecipe($0)} ?? "null"
+        let draft=(try? LocalRulePlanner().plan(c)).map{compactPromptRecipe($0)} ?? "null"
         let m=c.analysis.metrics
         let profile=c.referenceProfileID.map{"\"\($0)\""} ?? "null"
         let system="""
@@ -70,6 +70,18 @@ public actor NativeAgentPlanner: AgentPlanner {
         user_instruction:\(c.instruction)
         """
         return "<|im_start|>system\n"+system+"<|im_end|>\n<|im_start|>user\n"+user+"<|im_end|>\n<|im_start|>assistant\n"
+    }
+    private static func compactPromptRecipe(_ recipe: EditRecipe)->String {
+        // The installed 1.5B model keeps its bounded v1 grammar; merge its patch
+        // back into v2 so advanced/manual controls and brush data remain untouched.
+        guard let data=try? JSONEncoder().encode(recipe),var object=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] else {return "null"}
+        object=object.filter{["global","color","beauty","masks","operations","evaluation"].contains($0.key)};object["version"]=1
+        if let g=object["global"] as? [String:Any] {object["global"]=g.filter{["exposure","contrast","highlights","shadows","whites","blacks","temperature","tint","saturation","vibrance"].contains($0.key)}}
+        if let color=object["color"] as? [String:Any] {object["color"]=color.filter{["lut","intensity","referenceProfileID"].contains($0.key)}}
+        if let beauty=object["beauty"] as? [String:Any] {object["beauty"]=beauty.filter{["enabled","strength","skinTone","blemishRemoval","texturePreservation"].contains($0.key)}}
+        object["masks"]=[]
+        guard let value=try? JSONSerialization.data(withJSONObject:object,options:.sortedKeys) else {return "null"}
+        return String(decoding:value,as:UTF8.self)
     }
     static let grammar = #"""
     root ::= "{" ws "\"version\"" ws ":" ws "1" ws "," ws "\"global\"" ws ":" ws object "," ws "\"color\"" ws ":" ws object "," ws "\"beauty\"" ws ":" ws object "," ws "\"masks\"" ws ":" ws array "," ws "\"operations\"" ws ":" ws "[]" ws "," ws "\"evaluation\"" ws ":" ws object "}" ws

@@ -19,7 +19,7 @@ public actor LocalPreferenceMemory {
         url=directory.appendingPathComponent("preferences.json")
         if FileManager.default.fileExists(atPath:url.path) {
             value=try JSONDecoder().decode(EditingPreferences.self,from:Data(contentsOf:url))
-            guard value.confirmationCount>=0,value.confirmationCount<=100000,value.beautyStrength.isFinite,(0...1).contains(value.beautyStrength),value.temperature.isFinite,(2500...10000).contains(value.temperature),value.saturation.isFinite,(0...2).contains(value.saturation) else { throw LumaError.corruptData("本地偏好数据") }
+            guard value.confirmationCount>=0,value.confirmationCount<=100000,value.beautyStrength.isFinite,(0...1).contains(value.beautyStrength),value.temperature.isFinite,(2000...12000).contains(value.temperature),value.saturation.isFinite,(0...2).contains(value.saturation) else { throw LumaError.corruptData("本地偏好数据") }
         } else { value=EditingPreferences() }
     }
     public func preferences() -> EditingPreferences { value }

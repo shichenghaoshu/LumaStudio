@@ -68,7 +68,7 @@ struct AgentPlanView: View {
             HStack { Button("记住这个风格"){model.rememberStyle()};Spacer();Text("仅保存在本机").foregroundStyle(.secondary) }.font(.caption2).disabled(model.agentBusy)
         }
     }
-    private func maskName(_ kind: MaskKind)->String { switch kind {case .face:return "人脸";case .skin:return "皮肤";case .subject:return "人物";case .background:return "背景";case .hair:return "头发";case .sky:return "天空"} }
+    private func maskName(_ kind: MaskKind)->String { switch kind {case .face:return "人脸";case .skin:return "皮肤";case .subject:return "人物";case .background:return "背景";case .hair:return "头发";case .sky:return "天空";case .brush:return "画笔"} }
 }
 struct AgentAdvancedControls: View {
     @ObservedObject var model: AppModel

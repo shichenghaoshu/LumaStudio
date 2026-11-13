@@ -36,7 +36,12 @@ for platform, target, mainDir, sdk, minimum in [('Mac','LumaStudioMac','LumaStud
     notice=add('notices','isa = PBXFileReference; lastKnownFileType = text; path = "Resources/ThirdPartyNotices.txt"; sourceTree = "<group>";')
     if notice not in refs: refs.append(notice)
     noticebuild=add(target+'noticebuild','isa = PBXBuildFile; fileRef = '+notice+';')
-    phases.append(add(target+'res','isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = '+array([assetbuild,noticebuild])+'; runOnlyForDeploymentPostprocessing = 0;'))
+    resourcebuilds=[assetbuild,noticebuild]
+    if platform=='Mac':
+        runtime=add('libraw-runtime','isa = PBXFileReference; lastKnownFileType = folder; path = "Vendor/libraw-runtime"; sourceTree = "<group>";')
+        if runtime not in refs: refs.append(runtime)
+        resourcebuilds.append(add(target+'libraw-build','isa = PBXBuildFile; fileRef = '+runtime+';'))
+    phases.append(add(target+'res','isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = '+array(resourcebuilds)+'; runOnlyForDeploymentPostprocessing = 0;'))
     # Local ad-hoc builds have no Team ID, so hardened library validation cannot
     # authenticate a separately signed llama.framework. A Developer ID distribution
     # must override this to YES and sign the app/framework with that same team.
@@ -46,7 +51,7 @@ for platform, target, mainDir, sdk, minimum in [('Mac','LumaStudioMac','LumaStud
     else: cfg.update({'ARCHS':'arm64','CODE_SIGN_ENTITLEMENTS':'Apps/LumaStudioMac/LumaStudioMac.entitlements'})
     cl=cfg_list(target,cfg)
     tid=add(target,'isa = PBXNativeTarget; buildConfigurationList = '+cl+'; buildPhases = '+array(phases)+'; buildRules = (); dependencies = (); name = '+target+'; packageProductDependencies = '+array([dep])+'; productName = '+target+'; productReference = '+product+'; productType = "com.apple.product-type.application";'); targets.append(tid)
-    info={'CFBundleDevelopmentRegion':'zh_CN','CFBundleDisplayName':'LumaStudio','CFBundleExecutable':'$(EXECUTABLE_NAME)','CFBundleIdentifier':'$(PRODUCT_BUNDLE_IDENTIFIER)','CFBundleInfoDictionaryVersion':'6.0','CFBundleURLTypes':[{'CFBundleURLName':'studio.luma.pairing','CFBundleURLSchemes':['lumastudio']}],'CFBundleName':'LumaStudio','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.3.0' if platform=='Mac' else '0.1.0','CFBundleVersion':'5' if platform=='Mac' else '1','LSMinimumSystemVersion':minimum,'NSCameraUsageDescription':'发现已连接的 G9 并验证 USB 联机拍摄能力。','NSLocalNetworkUsageDescription':'在本地网络与经过配对的 Mac 或 iPad 传输照片。','NSBonjourServices':['_lumastudio._tcp']}
+    info={'CFBundleDevelopmentRegion':'zh_CN','CFBundleDisplayName':'LumaStudio','CFBundleExecutable':'$(EXECUTABLE_NAME)','CFBundleIdentifier':'$(PRODUCT_BUNDLE_IDENTIFIER)','CFBundleInfoDictionaryVersion':'6.0','CFBundleURLTypes':[{'CFBundleURLName':'studio.luma.pairing','CFBundleURLSchemes':['lumastudio']}],'CFBundleName':'LumaStudio','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.4.2' if platform=='Mac' else '0.1.0','CFBundleVersion':'8' if platform=='Mac' else '1','LSMinimumSystemVersion':minimum,'NSCameraUsageDescription':'发现已连接的 G9 并验证 USB 联机拍摄能力。','NSLocalNetworkUsageDescription':'在本地网络与经过配对的 Mac 或 iPad 传输照片。','NSBonjourServices':['_lumastudio._tcp']}
     if platform=='Mac': info.update({'NSMicrophoneUsageDescription':'将你主动输入的语音转换成修图要求。','NSSpeechRecognitionUsageDescription':'把语音转写到修图输入框，默认使用设备端识别。'})
     if platform=='Pad': info.update({'UILaunchScreen':{},'UIApplicationSceneManifest':{'UIApplicationSupportsMultipleScenes':True},'UISupportedInterfaceOrientations':['UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight','UIInterfaceOrientationPortrait','UIInterfaceOrientationPortraitUpsideDown'],'LSSupportsOpeningDocumentsInPlace':True,'UIFileSharingEnabled':True})
     (ROOT/'Apps'/mainDir/'Info.plist').write_bytes(plistlib.dumps(info))

@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED = ["Package.swift", "Package.resolved", "README.md", ".gitignore", ".github", "LumaStudio.xcodeproj", "Apps", "Packages", "Resources", "Tests", "Tools", "Scripts", "Documentation", "Training", "Models/manifests", "Vendor/llama-runtime.xcframework", "Vendor/llama-LICENSE.txt", "Vendor/Notices", "Vendor/runtime-provenance.json"]
+ALLOWED = ["Package.swift", "Package.resolved", "README.md", ".gitignore", ".github", "LumaStudio.xcodeproj", "Apps", "Packages", "Resources", "Tests", "Tools", "Scripts", "Documentation", "Training", "Models/manifests", "Vendor/llama-runtime.xcframework", "Vendor/llama-LICENSE.txt", "Vendor/Notices", "Vendor/runtime-provenance.json", "Vendor/libraw-runtime"]
 DENIED = ("work/", "Artifacts/", "Deliverables/", "pixcake-re/", "rea/", "Models/mac/", "ReleaseData/", "DerivedData", "Vendor/llama.xcframework/", "Vendor/build-apple/")
 SECRET = re.compile(rb"(?:sk-[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)")
 

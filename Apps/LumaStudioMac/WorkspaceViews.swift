@@ -49,195 +49,139 @@ private struct WorkspaceRailButton: View {
 }
 
 private enum WorkspaceInspectorTab: String,CaseIterable {
-    case color="调色",portrait="人像",recipe="配方",assistant="助手"
-    var symbol: String { switch self {case .color:return "slider.horizontal.3";case .portrait:return "person.crop.square";case .recipe:return "square.stack";case .assistant:return "sparkles"} }
+    case assistant="AI 助手",color="调色",masks="局部",portrait="人像",style="滤镜",geometry="裁剪",raw="RAW",recipe="预设",output="导出"
+    var symbol: String {switch self{case .assistant:return "sparkles";case .color:return "paintpalette";case .masks:return "square.dashed";case .portrait:return "person.crop.circle";case .style:return "camera.filters";case .geometry:return "crop";case .raw:return "camera.aperture";case .recipe:return "cube";case .output:return "square.and.arrow.up"}}
 }
 
 struct MacEditWorkspace: View {
     @ObservedObject var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: WorkspaceInspectorTab = .color
+    @State private var assistantOpen=false
+    @State private var fineEditing=true
+    @State private var referenceLines=false
     @State private var zoom: CGFloat=1
     @State private var comparing=false
     @State private var comparisonPosition: CGFloat=0.5
     @State private var photoInfoPresented=false
     @State private var recipeName="我的人像配方"
-
     var body: some View {
         VStack(spacing:0) {
             header
-            Divider()
             HStack(spacing:0) {
+                if assistantOpen {MacAgentConversation(model:model).frame(width:310);Divider()}
                 VStack(spacing:0) {
                     canvasToolbar
-                    Divider()
                     MacPhotoStage(model:model,zoom:zoom,comparing:comparing,comparisonPosition:$comparisonPosition)
+                        .overlay {if referenceLines {GeometryReader{proxy in Path{path in for i in 1...2{let t=CGFloat(i)/3;path.move(to:CGPoint(x:proxy.size.width*t,y:0));path.addLine(to:CGPoint(x:proxy.size.width*t,y:proxy.size.height));path.move(to:CGPoint(x:0,y:proxy.size.height*t));path.addLine(to:CGPoint(x:proxy.size.width,y:proxy.size.height*t))}}.stroke(.white.opacity(0.28),lineWidth:0.5)}.allowsHitTesting(false)}}
+                        .overlay(alignment:.bottomTrailing){if assistantOpen {Button{fineEditing.toggle();if tab == .assistant{tab = .color}}label:{Label(fineEditing ? "收起参数" : "精细调整",systemImage:"slider.horizontal.3")}.buttonStyle(.bordered).padding(16)}}
                     previewStatus
-                    Divider()
                     MacWorkspaceFilmstrip(model:model)
                 }.frame(maxWidth:.infinity,maxHeight:.infinity)
-                Divider()
-                inspector.frame(width:336)
+                if fineEditing {inspector.frame(width:354)}
+                moduleRail
             }
-        }.onChange(of:model.selectedID) { _,_ in zoom=1;comparing=false;comparisonPosition=0.5 }
+        }.background(Color(white:0.07))
+            .onChange(of:model.selectedID){_,_ in zoom=1;comparing=false;comparisonPosition=0.5}
     }
-
     private var header: some View {
-        HStack(spacing:16) {
-            VStack(alignment:.leading,spacing:4) {
-                Text("照片编辑").font(.system(size:16,weight:.semibold))
-                Text(model.selected?.name ?? "导入照片，开始本地修图").font(.system(size:11)).foregroundStyle(.secondary).lineLimit(1).help(model.selected?.name ?? "")
-            }
-            Spacer(minLength:12)
-            Button { model.agentProcessPresented=true } label:{Label("处理过程",systemImage:"list.bullet.rectangle")}
-                .font(.system(size:11)).buttonStyle(.borderless).accessibilityLabel("打开处理过程")
-            Label("本地工作区",systemImage:"lock.shield").font(.system(size:11)).foregroundStyle(.secondary)
-            Divider().frame(height:20)
+        HStack(spacing:14) {
+            HStack(spacing:8){Image(systemName:"camera.aperture").font(.system(size:22,weight:.light)).foregroundStyle(studioAccent);Text("LumaStudio").font(.system(size:13,weight:.semibold))}
             ImportButtons(model:model)
-            HStack(spacing:4) {
-                Button{model.undo()}label:{Image(systemName:"arrow.uturn.backward").frame(width:26,height:26)}
-                    .help("撤销编辑 ⌘Z").accessibilityLabel("撤销编辑").keyboardShortcut("z",modifiers:.command).disabled(!model.canUndo || model.agentBusy)
-                Button{model.redo()}label:{Image(systemName:"arrow.uturn.forward").frame(width:26,height:26)}
-                    .help("重做编辑 ⇧⌘Z").accessibilityLabel("重做编辑").keyboardShortcut("z",modifiers:[.command,.shift]).disabled(!model.canRedo || model.agentBusy)
-            }.buttonStyle(.borderless)
-        }.padding(.horizontal,20).frame(height:66).background(WorkspaceTheme.panel)
+            Spacer(minLength:10)
+            HStack(spacing:2) {
+                headerMode("精修",symbol:"slider.horizontal.3",selected:!assistantOpen){assistantOpen=false;fineEditing=true;tab = .color}
+                headerMode("AI 助手",symbol:"sparkles",selected:assistantOpen){assistantOpen=true;fineEditing=false;model.drawingBrush=false}
+                headerMode("批量",symbol:"square.grid.2x2",selected:false){model.page = .batch}
+            }.padding(3).background(.white.opacity(0.035),in:RoundedRectangle(cornerRadius:7))
+            Spacer(minLength:10)
+            HStack(spacing:12) {
+                Button{model.page = .capture}label:{Image(systemName:"camera")}.help("拍摄工作区").accessibilityLabel("拍摄工作区")
+                Button{model.integrationsPresented=true}label:{Image(systemName:"network")}.help("模型 API 与语音接入").accessibilityLabel("接入设置")
+                Button{model.modelManagerPresented=true}label:{Image(systemName:"cpu")}.help("本地模型").accessibilityLabel("本地模型设置")
+                Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.help("Agent 处理过程").accessibilityLabel("打开处理过程")
+            }.buttonStyle(.plain).font(.system(size:14)).foregroundStyle(.secondary)
+            HStack(spacing:0) {
+                Button("导出"){model.exportToLibrary()}.buttonStyle(.plain).padding(.leading,19).padding(.trailing,12).accessibilityLabel("导出当前照片")
+                Menu{Button("选择输出文件夹…"){model.choose(.exportSingle)};Button("导出设置…"){show(.output)}}label:{Image(systemName:"chevron.down").padding(.trailing,10)}.menuStyle(.borderlessButton).fixedSize().accessibilityLabel("更多导出选项")
+            }.font(.system(size:12,weight:.semibold)).foregroundStyle(.black).frame(height:31).background(studioAccent,in:RoundedRectangle(cornerRadius:6)).disabled(model.selected==nil || model.rendering || model.agentBusy)
+        }.padding(.horizontal,16).frame(height:58).background(Color(white:0.08))
     }
-
+    private func headerMode(_ title: String,symbol: String,selected: Bool,action: @escaping ()->Void)->some View {
+        Button(action:action){Label(title,systemImage:symbol).font(.system(size:11,weight:.medium)).padding(.horizontal,15).padding(.vertical,7).background(selected ? .white.opacity(0.13) : .clear,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(selected ? .white : .secondary)}.buttonStyle(.plain).accessibilityLabel(title+"工作区")
+    }
+    private func tool(_ title: String,_ symbol: String,active: Bool=false,action: @escaping ()->Void)->some View {
+        Button(action:action){VStack(spacing:5){Image(systemName:symbol).font(.system(size:17,weight:.light));Text(title).font(.system(size:9))}.frame(minWidth:39).frame(height:49).foregroundStyle(active ? studioAccent : Color.white.opacity(0.68))}.buttonStyle(.plain).accessibilityLabel(title+"工具")
+    }
     private var canvasToolbar: some View {
-        HStack(spacing:8) {
-            Button{zoom=max(0.5,zoom-0.25)}label:{Image(systemName:"minus.magnifyingglass")}.help("缩小预览").accessibilityLabel("缩小预览")
-            Button(zoom==1 ? "适应窗口" : String(format:"适应 ×%.2f",Double(zoom))) { zoom=1 }.font(.system(size:11)).frame(width:83).help("恢复适应窗口的尺寸")
-            Button{zoom=min(4,zoom+0.25)}label:{Image(systemName:"plus.magnifyingglass")}.help("放大预览").accessibilityLabel("放大预览")
-            Spacer()
-            Button {
-                comparing.toggle();model.showingOriginal=false
-            } label:{Label("前后对比",systemImage:"rectangle.lefthalf.inset.filled").font(.system(size:11)).foregroundStyle(comparing ? studioAccent : .secondary)}
-                .help("拖动分界线比较原图与效果").accessibilityLabel("前后对比").disabled(model.original==nil)
-            Button(model.showingOriginal ? "返回效果" : "查看原图") { model.showingOriginal.toggle();comparing=false }.font(.system(size:11)).disabled(model.original==nil)
-        }.buttonStyle(.borderless).padding(.horizontal,18).frame(height:40).background(Color(white:0.08)).disabled(model.preview==nil)
+        HStack(spacing:10) {
+            Menu(zoom==1 ? "适应" : String(format:"×%.2f",Double(zoom))){Button("适应窗口"){zoom=1};Button("放大"){zoom=min(4,zoom+0.25)};Button("缩小"){zoom=max(0.5,zoom-0.25)}}.font(.system(size:11)).menuStyle(.borderlessButton).frame(width:62)
+            ScrollView(.horizontal){HStack(spacing:12){
+                tool("浏览","hand.draw",active:!model.drawingBrush){model.drawingBrush=false}
+                tool("裁剪","crop",active:tab == .geometry){show(.geometry)}
+                tool("参考线","squareshape.split.3x3",active:referenceLines){referenceLines.toggle()}
+                tool("画笔","paintbrush.pointed",active:model.drawingBrush){if model.activeMask?.kind != .brush{model.addMask(.brush)};show(.masks);model.drawingBrush=true}
+                tool("局部","square.dashed",active:tab == .masks){show(.masks)}
+                tool("AI 调整","sparkles",active:assistantOpen){assistantOpen=true;fineEditing=false;model.drawingBrush=false}
+                tool("参考图","photo.on.rectangle"){model.choose(.reference)}
+                tool("滤镜","camera.filters",active:tab == .style){show(.style)}
+            }}.scrollIndicators(.hidden)
+            HStack(spacing:11){
+                Button{model.undo()}label:{Image(systemName:"arrow.uturn.backward")}.help("撤销 ⌘Z").accessibilityLabel("撤销编辑").keyboardShortcut("z",modifiers:.command).disabled(!model.canUndo || model.agentBusy)
+                Button{model.redo()}label:{Image(systemName:"arrow.uturn.forward")}.help("重做 ⇧⌘Z").accessibilityLabel("重做编辑").keyboardShortcut("z",modifiers:[.command,.shift]).disabled(!model.canRedo || model.agentBusy)
+                Button{model.reset()}label:{Image(systemName:"arrow.counterclockwise")}.help("重置当前编辑").accessibilityLabel("重置当前编辑")
+            }.buttonStyle(.plain).font(.system(size:14)).foregroundStyle(.secondary)
+            tool("预设","cube",active:tab == .recipe){show(.recipe)}
+        }.padding(.horizontal,14).frame(height:60).background(Color(white:0.055)).disabled(model.preview==nil)
     }
-
+    private func show(_ value: WorkspaceInspectorTab) {tab=value;fineEditing=true;if value != .masks{model.drawingBrush=false;model.showMaskOverlay=false}}
     private var previewStatus: some View {
         HStack(spacing:8) {
-            if model.rendering { ProgressView().controlSize(.mini) }
-            Text(model.rendering ? "正在更新预览…" : (model.renderStatus.contains(" ms") ? "预览已更新" : model.renderStatus)).font(.system(size:10)).foregroundStyle(.secondary).lineLimit(1)
-            Spacer(minLength:8)
-            if model.selected?.isRAW == true { Text(model.useCompanionJPEG ? "配对 JPEG" : "RAW").font(.system(size:9,weight:.semibold)).foregroundStyle(studioAccent) }
-            Button{photoInfoPresented.toggle()}label:{Image(systemName:"info.circle").font(.system(size:11))}.buttonStyle(.borderless).accessibilityLabel("照片与处理信息")
-                .popover(isPresented:$photoInfoPresented) {
-                    VStack(alignment:.leading,spacing:10) {
-                        Text(model.selected?.name ?? "尚未选择照片").font(.headline)
-                        if let image=model.preview { Text("当前预览：\(image.width) × \(image.height)") }
-                        Text(model.renderStatus).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-                        Text("预览用于编辑；导出时按原片尺寸重新处理。").foregroundStyle(.secondary)
-                    }.font(.caption).padding(20).frame(width:320)
-                }.disabled(model.selected==nil)
-        }.padding(.horizontal,18).frame(height:30).background(Color(white:0.065))
+            if model.rendering{ProgressView().controlSize(.mini)}
+            Text(model.selected?.name ?? "尚未选择照片").font(.system(size:10)).lineLimit(1).foregroundStyle(.secondary)
+            if model.selected?.isRAW==true{Text("RAW").font(.system(size:8,weight:.semibold)).foregroundStyle(studioAccent)}
+            Spacer(minLength:5)
+            Button{comparing.toggle();model.showingOriginal=false}label:{Label("前后对比",systemImage:"rectangle.lefthalf.inset.filled")}.foregroundStyle(comparing ? studioAccent : .secondary).accessibilityLabel("前后对比")
+            Button(model.showingOriginal ? "返回效果" : "查看原图"){model.showingOriginal.toggle();comparing=false}.foregroundStyle(.secondary)
+            Button{photoInfoPresented.toggle()}label:{Image(systemName:"info.circle")}.accessibilityLabel("照片与处理信息").popover(isPresented:$photoInfoPresented){VStack(alignment:.leading,spacing:10){Text(model.selected?.name ?? "").font(.headline);if let image=model.preview{Text("预览：\(image.width) × \(image.height)")};Text(model.renderStatus);Text("导出时按原片重新处理。").foregroundStyle(.secondary)}.font(.caption).padding(20).frame(width:300)}
+        }.buttonStyle(.plain).font(.system(size:10)).padding(.horizontal,14).frame(height:31).background(Color(white:0.055))
     }
-
+    private var moduleRail: some View {
+        VStack(spacing:3){
+            ForEach(WorkspaceInspectorTab.allCases,id:\.self){item in Button{
+                if item == .assistant{assistantOpen.toggle();fineEditing = !assistantOpen;model.drawingBrush=false}
+                else{show(item)}
+            }label:{VStack(spacing:6){Image(systemName:item.symbol).font(.system(size:18,weight:.light)).frame(width:32,height:28).background((item == .assistant ? assistantOpen : tab==item && fineEditing) ? Color.white.opacity(0.13) : .clear,in:RoundedRectangle(cornerRadius:6));Text(item.rawValue).font(.system(size:9))}.foregroundStyle((item == .assistant ? assistantOpen : tab==item && fineEditing) ? studioAccent : Color.white.opacity(0.56)).frame(width:52,height:59)}.buttonStyle(.plain).accessibilityLabel(item.rawValue+"面板")}
+            Spacer(minLength:0)
+        }.padding(.top,12).frame(width:58).background(Color(white:0.075))
+    }
     private var inspector: some View {
-        VStack(spacing:0) {
-            HStack(spacing:0) {
-                ForEach(WorkspaceInspectorTab.allCases,id:\.self) { item in
-                    Button {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration:0.16)) { tab=item }
-                    } label:{
-                        VStack(spacing:7) {
-                            Image(systemName:item.symbol).font(.system(size:15))
-                            Text(item.rawValue).font(.system(size:11,weight:tab==item ? .semibold : .regular))
-                        }.frame(maxWidth:.infinity).frame(height:64).foregroundStyle(tab==item ? studioAccent : Color.white.opacity(0.52))
-                            .overlay(alignment:.bottom) { Rectangle().fill(tab==item ? studioAccent : .clear).frame(height:2).padding(.horizontal,17) }
-                    }.buttonStyle(.plain).accessibilityLabel("\(item.rawValue)面板").accessibilityAddTraits(tab==item ? [.isSelected] : [])
-                }
-            }
-            Divider()
-            ScrollView {
-                VStack(alignment:.leading,spacing:0) {
-                    switch tab {
-                    case .color: colorInspector
-                    case .portrait: portraitInspector
-                    case .recipe: recipeInspector
-                    case .assistant: assistantInspector
+        VStack(spacing:0){
+            HStack{Label(tab.rawValue=="调色" ? "色彩调节" : tab.rawValue,systemImage:tab.symbol).font(.system(size:12,weight:.medium));Spacer();if tab == .color{Text("\(ParameterCatalog.all.count) 项参数").font(.system(size:9)).foregroundStyle(.tertiary)}}.padding(.horizontal,16).frame(height:42)
+            ScrollView{
+                VStack(alignment:.leading,spacing:0){
+                    switch tab{
+                    case .color:ProInspectorView(model:model)
+                    case .portrait:ProInspectorView(model:model,section:.portrait)
+                    case .masks:ProInspectorView(model:model,section:.masks)
+                    case .style:ProInspectorView(model:model,section:.style)
+                    case .geometry:ProInspectorView(model:model,section:.geometry)
+                    case .raw:ProInspectorView(model:model,section:.raw)
+                    case .output:ProInspectorView(model:model,section:.output)
+                    case .recipe:recipeInspector
+                    case .assistant:assistantInspector
                     }
-                }.padding(.horizontal,20).padding(.bottom,20)
-                    .disabled(model.selected==nil || (model.agentBusy && tab != .assistant))
+                }.padding(.horizontal,12).padding(.bottom,16).disabled(model.selected==nil || (model.agentBusy && tab != .assistant))
             }.id(tab)
-            Divider()
-            exportFooter
-        }.background(WorkspaceTheme.panel)
+            HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.recipeSyncPresented=true}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
+        }.background(Color(white:0.095))
     }
-
-    private var colorInspector: some View {
-        Group {
-            InspectorSection("基础调整") {
-                WorkspaceSlider("曝光",value:$model.recipe.color.exposure,range:-3...3,defaultValue:0,unit:" EV")
-                WorkspaceSlider("色温",value:$model.recipe.color.temperature,range:2500...10000,defaultValue:6500,integer:true,unit:" K")
-                WorkspaceSlider("对比度",value:$model.recipe.color.contrast,range:0.5...1.5,defaultValue:1)
-                WorkspaceSlider("饱和度",value:$model.recipe.color.saturation,range:0...2,defaultValue:1)
-            }
-            InspectorSection("摄影风格") {
-                LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible()),GridItem(.flexible())],spacing:10) {
-                    ForEach(FilterPreset.allCases) { preset in
-                        Button { model.recipe.color.enabled=true;model.recipe.color.presetID=preset.id } label:{
-                            PresetPhotoPreview(asset:model.selected,preset:preset,selected:model.recipe.color.presetID==preset.id)
-                        }.buttonStyle(.plain).accessibilityLabel("\(presetTitle(preset))滤镜")
-                    }
-                }
-                Text("原片缩略图上的 LUT 预览").font(.system(size:10)).foregroundStyle(.tertiary)
-                WorkspaceSlider("风格强度",value:$model.recipe.color.intensity,range:0...1,defaultValue:0.8,percentage:true)
-            }
-            InspectorSection("影调与色彩",expanded:false) {
-                WorkspaceSlider("高光",value:editBinding(\.highlights),range:-1...1,defaultValue:0)
-                WorkspaceSlider("阴影",value:editBinding(\.shadows),range:-1...1,defaultValue:0)
-                WorkspaceSlider("白色色阶",value:editBinding(\.whites),range:-1...1,defaultValue:0)
-                WorkspaceSlider("黑色色阶",value:editBinding(\.blacks),range:-1...1,defaultValue:0)
-                WorkspaceSlider("自然饱和度",value:editBinding(\.vibrance),range:-1...1,defaultValue:0)
-                WorkspaceSlider("色调",value:editBinding(\.tint),range:-100...100,defaultValue:0,integer:true)
-            }
-            InspectorSection("参考色彩",expanded:false) {
-                Button{model.choose(.reference)}label:{Label("选择参考照片…",systemImage:"photo.on.rectangle")}.frame(maxWidth:.infinity)
-                if let profile=model.profile {
-                    HStack { Text(profile.name).lineLimit(1);Spacer();Button{model.removeReference()}label:{Image(systemName:"xmark.circle")}.buttonStyle(.plain).accessibilityLabel("移除参考色彩") }.font(.caption)
-                    HStack { Button("保存档案"){model.exportProfile()};Button("导出 LUT"){model.exportLUT()} }.font(.caption)
-                } else { Text("从参考照片提取色彩，再调整到你满意。").font(.caption).foregroundStyle(.secondary);Button("载入色彩档案…"){model.choose(.profile)}.font(.caption) }
-            }
-            if model.selected?.isRAW == true {
-                InspectorSection("RAW 显影",expanded:false) {
-                    WorkspaceSlider("RAW 曝光",value:$model.recipe.raw.exposure,range:-3...3,defaultValue:0,unit:" EV")
-                    WorkspaceSlider("阴影恢复",value:$model.recipe.raw.shadows,range:-1...1,defaultValue:0)
-                    WorkspaceSlider("局部影调",value:$model.recipe.raw.highlights,range:0...1,defaultValue:0.7)
-                    WorkspaceSlider("RAW 色温",value:Binding(get:{model.recipe.raw.temperature ?? 6500},set:{model.recipe.raw.temperature=$0}),range:2500...10000,defaultValue:6500,integer:true,unit:" K")
-                    Button("恢复相机白平衡"){model.recipe.raw.temperature=nil;model.recipe.raw.tint=nil}.font(.caption)
-                    if model.selected?.companionURL != nil { Toggle("使用配对 JPEG",isOn:$model.useCompanionJPEG).font(.caption) }
-                }
-            }
-        }
-    }
-
-    private var portraitInspector: some View {
-        Group {
-            InspectorSection("自然美颜") {
-                Toggle("启用自然美颜",isOn:$model.recipe.beauty.enabled).toggleStyle(.switch).controlSize(.small).font(.caption)
-                Button{model.oneClickBeauty()}label:{Label("应用自然美颜",systemImage:"sparkles").frame(maxWidth:.infinity)}.buttonStyle(.borderedProminent).controlSize(.large)
-                WorkspaceSlider("磨皮强度",value:$model.recipe.beauty.strength,range:0...1,defaultValue:0.35,percentage:true)
-                WorkspaceSlider("肤色优化",value:$model.recipe.beauty.skinTone,range:0...1,defaultValue:0.25,percentage:true)
-                WorkspaceSlider("细小瑕疵弱化",value:$model.recipe.beauty.blemishRemoval,range:0...1,defaultValue:0.2,percentage:true)
-                WorkspaceSlider("纹理保留",value:$model.recipe.beauty.texturePreservation,range:0.6...1,defaultValue:0.94,percentage:true)
-                Text("MetalPetal 高通磨皮结合皮肤区域与纹理保护。开启前后对比，检查五官和皮肤细节；实际后端可在照片信息中查看。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-            }
-            if model.recipe.edit?.masks.isEmpty == false {
-                InspectorSection("局部调整") {
-                    AgentAdvancedControls(model:model)
-                }
-            }
-        }
-    }
-
     private var recipeInspector: some View {
         Group {
             InspectorSection("保存当前配方") {
                 Text("把当前调整保存下来，用于下一张或同组照片。").font(.caption).foregroundStyle(.secondary)
                 TextField("配方名称",text:$recipeName).textFieldStyle(.roundedBorder).accessibilityLabel("配方名称")
+                HStack {Button("复制 v2 配方"){model.copyRecipe()};Button("粘贴配方"){model.pasteRecipe()}}.font(.caption)
+                Button("载入配方文件…"){model.choose(.recipe)}.font(.caption)
                 Button("保存配方") { model.saveRecipe(named:recipeName) }.disabled(recipeName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
             }
             InspectorSection("已保存配方") {
@@ -250,8 +194,11 @@ struct MacEditWorkspace: View {
                 Button("从文件载入…"){model.choose(.recipe)}.font(.caption)
             }
             InspectorSection("应用到同组照片") {
-                Text("先选择照片，再确认批量导出。每张照片保留原片。").font(.caption).foregroundStyle(.secondary)
-                Button{openBatch()}label:{Label("选择整组并前往批量…",systemImage:"square.grid.2x2")}.font(.caption)
+                Text("按分组同步到所选照片，保留各自的裁剪、局部区域与已锁定参数。").font(.caption).foregroundStyle(.secondary)
+                Button{model.recipeSyncPresented=true}label:{Label("选择照片并同步…",systemImage:"arrow.triangle.2.circlepath")}.font(.caption).disabled(!model.canSynchronize)
+                Button{openBatch()}label:{Label("前往批量导出…",systemImage:"square.grid.2x2")}.font(.caption)
+                if !model.workflowStatus.isEmpty {Text(model.workflowStatus).font(.caption).foregroundStyle(studioAccent)}
+                if model.lastRecipeSync != nil {Button("撤回上次同步"){model.undoRecipeSynchronization()}.font(.caption).disabled(!model.canSynchronize)}
             }
             Button("重置当前编辑"){model.reset()}.font(.caption).foregroundStyle(.secondary).padding(.top,16)
         }
@@ -262,6 +209,11 @@ struct MacEditWorkspace: View {
             Button { model.agentProcessPresented=true } label:{Label("展开 Agent 处理过程",systemImage:"arrow.up.left.and.arrow.down.right").frame(maxWidth:.infinity)}
                 .buttonStyle(.bordered).accessibilityLabel("展开 Agent 处理过程")
             AgentComposer(model:model)
+            Label("AI 已锁定 \(model.recipe.document.lockedParameters.count) 项",systemImage:"lock").font(.caption).foregroundStyle(.secondary)
+            if !model.agentParameterChanges.isEmpty {
+                Divider();Text("本次参数修改").font(.caption.weight(.semibold))
+                ForEach(model.agentParameterChanges){change in HStack(alignment:.top){Text(change.title);Spacer();Text(change.before+" → "+change.after).monospacedDigit().foregroundStyle(.secondary)}.font(.caption2)}
+            }
             Divider()
             Label("照片在本机处理 · 效果由你确认",systemImage:"lock.shield").font(.caption).foregroundStyle(.secondary)
             Text(model.cloudSettings.mode == .online ? "当前选择在线模型规划，返回参数仍经过本机工具与指令检查。" : "当前为通用基础模型与规则辅助，尚未完成专业修图训练。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
@@ -293,7 +245,7 @@ struct MacEditWorkspace: View {
             edit.global[keyPath:key]=value;recipe.edit=edit;model.recipe=recipe
         })
     }
-    private func openBatch() { model.selection=Set(model.assets.map(\.id));model.page = .batch }
+    private func openBatch() { if model.selection.isEmpty {model.selection=Set(model.visibleAssets.map(\.id))};model.page = .batch }
 }
 
 private struct InspectorSection<Content: View>: View {
@@ -335,11 +287,11 @@ private struct WorkspaceSlider: View {
     }
 }
 
-private func presetTitle(_ preset: FilterPreset)->String {
-    switch preset {case .natural:return "自然";case .portrait:return "人像";case .film:return "胶片";case .warm:return "暖调";case .cool:return "冷调";case .clean:return "清透"}
+func presetTitle(_ preset: FilterPreset)->String {
+    preset.title
 }
 
-private struct PresetPhotoPreview: View {
+struct PresetPhotoPreview: View {
     let asset: PhotoAsset?
     let preset: FilterPreset
     let selected: Bool
@@ -374,7 +326,7 @@ private actor StylePreviewRenderer {
         let filtered=try preset.lut().apply(to:source)
         guard let image=context.createCGImage(filtered,from:source.extent) else { throw LumaError.invalidImage(url.lastPathComponent) }
         cache[key]=image;keys.append(key)
-        if keys.count>18 { cache.removeValue(forKey:keys.removeFirst()) }
+        if keys.count>64 { cache.removeValue(forKey:keys.removeFirst()) }
         return image
     }
 }
@@ -406,6 +358,7 @@ private struct MacPhotoStage: View {
     private func comparisonImage(preview: CGImage,size: CGSize)->some View {
         ZStack {
             photo(model.showingOriginal ? (model.original ?? preview) : preview,size:size)
+            if !model.showingOriginal {ProPhotoMaskOverlay(model:model,size:size,paintingAllowed:!comparing)}
             if comparing,let original=model.original {
                 photo(original,size:size).mask(alignment:.leading){Rectangle().frame(width:size.width*comparisonPosition)}
                 ZStack {
@@ -425,32 +378,37 @@ private struct MacPhotoStage: View {
 
 private struct MacWorkspaceFilmstrip: View {
     @ObservedObject var model: AppModel
-    @State private var query=""
-    @State private var rawOnly=false
-    private var photos: [PhotoAsset] { model.assets.filter{(!rawOnly || $0.isRAW) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query))} }
+    private var photos: [PhotoAsset] {model.visibleAssets}
     var body: some View {
         VStack(spacing:0) {
-            HStack(spacing:12) {
-                Text("照片 · \(photos.count)").font(.system(size:10,weight:.medium)).foregroundStyle(.secondary)
-                Spacer(minLength:8)
-                TextField("查找照片",text:$query).textFieldStyle(.plain).font(.system(size:10)).padding(.horizontal,8).padding(.vertical,4).background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:4)).frame(width:130).accessibilityLabel("查找照片")
-                Toggle("仅 RAW",isOn:$rawOnly).toggleStyle(.button).font(.system(size:10)).buttonStyle(.borderless)
+            HStack(spacing:9) {
+                Text("\(photos.count) 张 · 选中 \(model.selection.count)").font(.system(size:10,weight:.medium)).foregroundStyle(.secondary).fixedSize()
+                Spacer(minLength:0)
+                TextField("查找照片",text:$model.photoFilter.query).textFieldStyle(.plain).font(.system(size:10)).padding(.horizontal,8).padding(.vertical,4).background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:4)).frame(width:100).accessibilityLabel("查找照片")
+                PhotoFilterMenu(model:model).font(.system(size:10)).fixedSize()
+                PhotoReviewMenu(model:model,ids:Set([model.selectedID].compactMap{$0})).font(.system(size:10)).fixedSize()
+                Button("同步…"){model.recipeSyncPresented=true}.font(.system(size:10)).disabled(!model.canSynchronize)
                 Button {
-                    model.selection=Set(photos.map(\.id));model.page = .batch
-                } label:{Label("批量处理…",systemImage:"square.grid.2x2").font(.system(size:10))}.buttonStyle(.borderless).disabled(photos.isEmpty)
-            }.padding(.horizontal,16).frame(height:35)
+                    if model.selection.isEmpty {model.selection=Set(photos.map(\.id))};model.page = .batch
+                } label:{Label("批量…",systemImage:"square.grid.2x2").font(.system(size:10))}.buttonStyle(.borderless).disabled(photos.isEmpty)
+            }.controlSize(.small).padding(.horizontal,12).frame(height:35)
             ScrollView(.horizontal) {
                 LazyHStack(spacing:9) {
                     ForEach(photos) { asset in
-                        Button{model.select(asset)}label:{
-                            VStack(alignment:.leading,spacing:5) {
+                        VStack(alignment:.leading,spacing:5) {
+                            Button{model.select(asset)}label:{
                                 AsyncImage(url:asset.thumbnailURL){image in image.resizable().scaledToFit()}placeholder:{Color(white:0.09)}
                                     .frame(width:96,height:66).background(Color(white:0.035)).clipped().clipShape(RoundedRectangle(cornerRadius:4))
                                     .overlay(alignment:.topTrailing){if asset.isRAW { Text("RAW").font(.system(size:8,weight:.semibold)).padding(3).background(.black.opacity(0.65),in:RoundedRectangle(cornerRadius:2)).padding(3) }}
                                     .overlay(RoundedRectangle(cornerRadius:4).stroke(model.selectedID==asset.id ? studioAccent : .clear,lineWidth:1.5))
-                                Text(asset.name).font(.system(size:9)).foregroundStyle(model.selectedID==asset.id ? studioAccent : .secondary).lineLimit(1).frame(width:96,alignment:.leading)
-                            }.padding(4).background(model.selectedID==asset.id ? studioAccent.opacity(0.06) : .clear,in:RoundedRectangle(cornerRadius:5))
-                        }.buttonStyle(.plain).accessibilityLabel("编辑 \(asset.name)").help(asset.name)
+                                    .overlay(alignment:.bottomLeading){PhotoReviewBadge(review:model.review(for:asset.id)).padding(3)}
+                            }.buttonStyle(.plain).disabled(model.workflowBusy).accessibilityLabel("编辑 \(asset.name)").help(asset.name)
+                                .contextMenu{PhotoReviewActions(model:model,ids:[asset.id])}
+                            HStack(spacing:4) {
+                                Button{if model.selection.contains(asset.id){model.selection.remove(asset.id)}else{model.selection.insert(asset.id)}}label:{Image(systemName:model.selection.contains(asset.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(model.selection.contains(asset.id) ? studioAccent : .secondary)}.buttonStyle(.plain).accessibilityLabel((model.selection.contains(asset.id) ? "取消选择 " : "选为同步目标 ")+asset.name)
+                                Text(asset.name).font(.system(size:9)).foregroundStyle(model.selectedID==asset.id ? studioAccent : .secondary).lineLimit(1).frame(maxWidth:.infinity,alignment:.leading)
+                            }.frame(width:96,alignment:.leading).clipped()
+                        }.padding(4).background(model.selectedID==asset.id ? studioAccent.opacity(0.06) : .clear,in:RoundedRectangle(cornerRadius:5))
                     }
                     Button{model.choose(.photos)}label:{Image(systemName:"plus").font(.system(size:18,weight:.light)).foregroundStyle(.secondary).frame(width:50,height:66).background(Color.white.opacity(0.025),in:RoundedRectangle(cornerRadius:4))}.buttonStyle(.plain).accessibilityLabel("向图库添加照片").disabled(model.importing)
                 }.padding(.horizontal,12).padding(.bottom,10)

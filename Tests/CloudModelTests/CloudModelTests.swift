@@ -19,6 +19,16 @@ private actor FixtureTransport: ModelHTTPTransport {
     func last()->URLRequest? { requests.last }
 }
 final class CloudModelTests: XCTestCase {
+    func testDeepSeekDisablesThinkingForBoundedJSONButOtherProvidersAreUnchanged() async throws {
+        for deepseek in [false,true] {
+            var settings=configuration();if deepseek{settings.provider = .deepseek;settings.baseURL="https://api.deepseek.com";settings.model="deepseek-flash"}
+            let fixture=FixtureTransport(body:try JSONSerialization.data(withJSONObject:["choices":[["message":["content":"{\"ok\":true}"],"finish_reason":"stop"]]]))
+            try await OnlineAgentPlanner(settings:settings,key:"unit-test-key",transport:fixture).checkConnection()
+            let request=await fixture.last(),object=try XCTUnwrap(try JSONSerialization.jsonObject(with:request!.httpBody!) as? [String:Any])
+            if deepseek{XCTAssertEqual((object["thinking"] as? [String:String])?["type"],"disabled")}else{XCTAssertNil(object["thinking"])}
+        }
+        XCTAssertThrowsError(try OnlineAgentPlanner.outputText(JSONSerialization.data(withJSONObject:["choices":[["message":["content":"   "],"finish_reason":"stop"]]]),style:.chatCompletions))
+    }
     private func context() throws -> PlanningContext {
         let ci=CIImage(color:CIColor(red:0.4,green:0.3,blue:0.2)).cropped(to:CGRect(x:0,y:0,width:64,height:64))
         let cg=CIContext().createCGImage(ci,from:ci.extent)!

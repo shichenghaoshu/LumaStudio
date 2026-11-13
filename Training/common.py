@@ -42,7 +42,8 @@ def digest(path: Path):
 
 def validate_recipe(recipe):
     from jsonschema import Draft202012Validator
-    Draft202012Validator(json.loads(SCHEMA.read_text())).validate(recipe)
+    schema = SCHEMA.with_name("edit-recipe-v1.schema.json") if recipe.get("version") == 1 else SCHEMA
+    Draft202012Validator(json.loads(schema.read_text())).validate(recipe)
 
 def check_rights(sample, base: Path):
     identifier = sample.get("sample_id", "")
@@ -86,7 +87,7 @@ class NativeRenderer:
         return self.call("render", image, recipe_path, output, instruction)
 
 SYSTEM_PROMPT = (
-    "You are LumaStudio's photo editing planner. Return only a valid EditRecipe v1 JSON. "
+    "You are LumaStudio's photo editing planner. Return only a valid versioned EditRecipe JSON. "
     "Use the supplied scene metrics, intent and existing recipe. Do not invent tools or models. "
     "Preserve skin texture. Respect the JSON Schema and registered mask capabilities."
 )

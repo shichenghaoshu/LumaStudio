@@ -54,13 +54,13 @@ public struct QualityEvaluator: Sendable {
         var r=recipe
         for issue in report.issues {
             switch issue.kind {
-            case .highlights:r.global.exposure=max(-3,r.global.exposure-0.25);r.global.highlights=max(-1,r.global.highlights-0.15)
+            case .highlights:r.global.exposure=max(-5,r.global.exposure-0.25);r.global.highlights=max(-1,r.global.highlights-0.15)
             case .shadows:r.global.shadows=min(1,r.global.shadows+0.2);r.global.blacks=min(1,r.global.blacks+0.1)
             case .texture:r.beauty.strength *= 0.7;r.beauty.texturePreservation=max(0.94,r.beauty.texturePreservation)
             case .skinColor:r.global.temperature=6500+(r.global.temperature-6500)*0.5;r.color.intensity *= 0.7
-            case .brightnessAlignment:r.global.exposure=min(3,max(-3,r.global.exposure+Float(intent.brightnessDirection)*0.2))
+            case .brightnessAlignment:r.global.exposure=min(5,max(-5,r.global.exposure+Float(intent.brightnessDirection)*0.2))
             case .saturationAlignment:r.global.saturation=min(2,max(0,r.global.saturation+Float(intent.saturationDirection)*0.1))
-            case .warmthAlignment:r.global.temperature=min(10000,max(2500,r.global.temperature+Float(intent.warmthDirection)*350))
+            case .warmthAlignment:r.global.temperature=min(12000,max(2000,r.global.temperature+Float(intent.warmthDirection)*350))
             case .beautyAlignment:r.beauty.enabled = intent.beautyRequested && !intent.beautyForbidden
             case .unsupported:break
             }

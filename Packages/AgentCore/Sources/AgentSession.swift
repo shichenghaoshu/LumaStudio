@@ -77,10 +77,13 @@ public actor AgentSession {
         try Task.checkCancellation()
         await updates(.analysis(analysis))
         events.append(await emit(.analysis,.finished,"检测到 \(analysis.faceCount) 张人脸，已取得图像指标"))
-        let context=PlanningContext(instruction:text,analysis:analysis,preferences:preferences,currentRecipe:currentRecipe,referenceProfileID:referenceProfileID,previousInstructions:previousInstructions)
+        let capabilities=RAWCapabilities.inspect(asset.originalURL)
+        let context=PlanningContext(instruction:text,analysis:analysis,preferences:preferences,currentRecipe:currentRecipe,referenceProfileID:referenceProfileID,previousInstructions:previousInstructions,sourceFormat:asset.originalURL.pathExtension.lowercased(),availableRAWParameters:capabilities.supported.sorted())
         await progress("正在生成可执行的编辑方案…")
         events.append(await emit(.planning,.started,"根据指令生成参数，并检查可用工具与参数范围"))
         var plan=try await planner.plan(context)
+        plan.recipe=ParameterLockPolicy.applying(plan.recipe,preserving:currentRecipe)
+        if analysis.faceCount==0 || InstructionParser.parse(text).beautyForbidden {plan.recipe.beauty.enabled=false}
         try Task.checkCancellation();plan.recipe.evaluation.automaticCorrection=automaticCorrection
         try ToolRegistry().validate(plan.recipe)
         await updates(.plan(plan))
@@ -117,7 +120,8 @@ public actor AgentSession {
             try await history.save(run,assetID:asset.id,runID:id)
             await updates(.round(run.rounds[round],directory:dir))
             guard round<maxRounds,report.needsCorrection else { break }
-            let corrected=try evaluator.corrected(recipe,report:report,intent:evaluatedIntent)
+            var corrected=ParameterLockPolicy.applying(try evaluator.corrected(recipe,report:report,intent:evaluatedIntent),preserving:currentRecipe)
+            if analysis.faceCount==0 || intent.beautyForbidden {corrected.beauty.enabled=false}
             guard corrected != recipe else { break };recipe=corrected
         }
         guard let best else { throw LumaError.invalidImage("没有完成的编辑预览") }

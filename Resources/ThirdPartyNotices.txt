@@ -271,3 +271,19 @@ swift-collections 1.1.4
     you may redistribute such product without providing attribution as would
     otherwise be required by Sections 4(a), 4(b) and 4(d) of the License.
 
+
+
+LibRaw 0.22.3
+===============
+Copyright (C) 2008-2026 LibRaw LLC and contributors.
+Project: https://www.libraw.org/
+Unmodified official source: https://www.libraw.org/data/LibRaw-0.22.3.tar.gz
+Distributed under the CDDL-1.0 license option. LibRaw is dual-licensed under
+CDDL-1.0 or LGPL-2.1. LumaStudio chooses CDDL-1.0 for this component.
+The complete unmodified source archive, COPYRIGHT, both upstream license texts
+and provenance are included in Contents/Resources/libraw-runtime in the Mac app.
+The small LumaStudio helper and build script are in the accompanying source
+package under Tools/LibRawDecoder and Scripts/build_libraw_runtime.py.
+No warranty is provided by LibRaw or its contributors.
+The minimal fallback omits external LCMS, OpenMP and JPEG-lossy-DNG extensions;
+native Apple decoding remains primary. Source files were not modified.

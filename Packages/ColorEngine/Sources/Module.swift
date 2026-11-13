@@ -42,9 +42,24 @@ public struct LUT3D: Sendable {
     }
 }
 public enum FilterPreset: String, CaseIterable, Identifiable, Sendable {
-    case natural, portrait, film, warm, cool, clean
+    case natural, portrait, film, warm, cool, clean, ivory, rose, peach, softPortrait, amber, golden, copper, sunset, silver, mono, matteMono, noir, forest, jade, ocean, alpine, faded, vintage, instant, cinema, tealOrange, night, pastel, airy
     public var id: String { rawValue }
     public var name: String { rawValue.capitalized }
+    public var title: String {
+        ["natural":"自然","portrait":"自然人像","film":"经典胶片","warm":"暖调","cool":"冷调","clean":"清透","ivory":"象牙白","rose":"玫瑰","peach":"蜜桃","softPortrait":"柔光人像","amber":"琥珀","golden":"金色时刻","copper":"铜色","sunset":"落日","silver":"银盐","mono":"经典黑白","matteMono":"哑光黑白","noir":"黑色电影","forest":"森林","jade":"青玉","ocean":"海岸","alpine":"山野","faded":"褪色胶片","vintage":"复古","instant":"即影","cinema":"电影","tealOrange":"青橙","night":"夜色","pastel":"粉彩","airy":"空气感"][id] ?? name
+    }
+    public var category: String {
+        switch self {
+        case .natural,.warm,.cool,.clean:return "基础"
+        case .portrait,.ivory,.rose,.peach,.softPortrait:return "人像"
+        case .amber,.golden,.copper,.sunset:return "暖光"
+        case .silver,.mono,.matteMono,.noir:return "黑白"
+        case .forest,.jade,.ocean,.alpine:return "风光"
+        case .film,.faded,.vintage,.instant:return "胶片"
+        case .cinema,.tealOrange,.night:return "电影"
+        case .pastel,.airy:return "清新"
+        }
+    }
     public func lut() throws -> LUT3D {
         guard let url=Bundle.module.url(forResource: rawValue, withExtension: "cube") else { throw LumaError.corruptData("内置 LUT 缺失") }
         return try LUT3D(cube: String(contentsOf: url))
@@ -80,7 +95,9 @@ public final class ColorProcessor: @unchecked Sendable {
         guard settings.enabled else { return image }
         var result=image
         if let id=settings.presetID {
-            guard let lut=luts[id] else { throw LumaError.unsupported("未知滤镜：\(id)") }; result=lut.apply(to:result)
+            let lut: LUT3D
+            if let builtin=luts[id] {lut=builtin} else {lut=try UserFilterLibrary.load(id:id)}
+            result=lut.apply(to:result)
         }
         if let profile {
             let source=try analyze(image,context:context)

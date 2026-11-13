@@ -19,6 +19,8 @@ class PipelineTests(unittest.TestCase):
     def test_recipe_schema_rejects_executable_content(self):
         recipe={"version":1,"global":{},"color":{},"beauty":{},"masks":[],"operations":[],"evaluation":{}}
         validate_recipe(recipe)
+        validate_recipe({"version":2,"global":{"exposure":0.3,"texture":0.2}})
+        with self.assertRaises(Exception):validate_recipe({"version":3})
         recipe["shell"]="malicious command"
         with self.assertRaises(Exception):validate_recipe(recipe)
 

@@ -1,5 +1,6 @@
 import Foundation
 import CoreImage
+import PhotoDomain
 #if os(macOS)
 import Metal
 import MetalPetal
@@ -14,7 +15,7 @@ final class MetalPetalBeauty {
         else { context=nil }
     }
     var available: Bool { context != nil }
-    func apply(_ image: CIImage,strength: Float,preservation: Float) throws -> CIImage? {
+    func apply(_ image: CIImage,settings: BeautySettings) throws -> CIImage? {
         guard let context else { return nil }
         let space=CGColorSpace(name:CGColorSpace.sRGB)!
         let options=MTICIImageRenderingOptions(destinationPixelFormat:.rgba16Float,colorSpace:space,flipped:true)
@@ -25,8 +26,8 @@ final class MetalPetalBeauty {
         let filter=MTIHighPassSkinSmoothingFilter()
         filter.inputImage=input
         filter.outputPixelFormat = .rgba16Float
-        filter.amount=strength*max(0.25,1-(preservation-0.6)*1.3)
-        filter.radius=Float(max(2,8*max(image.extent.width,image.extent.height)/1600))
+        filter.amount=settings.strength*settings.smoothing*max(0.25,1-(settings.texturePreservation-0.6)*1.3)
+        filter.radius=Float(max(0.5,CGFloat(settings.radius)*max(image.extent.width,image.extent.height)/1600))
         // The upstream high-pass mask applies this gentle lift to skin texture.
         filter.toneCurveControlPoints=[MTIVector(values:[Float(0),0]),MTIVector(values:[Float(120)/255,Float(138)/255]),MTIVector(values:[Float(1),1])]
         guard let output=filter.outputImage else { return nil }
@@ -41,6 +42,6 @@ final class MetalPetalBeauty {
     #else
     init() {}
     var available: Bool { false }
-    func apply(_ image: CIImage,strength: Float,preservation: Float) throws -> CIImage? { nil }
+    func apply(_ image: CIImage,settings: BeautySettings) throws -> CIImage? { nil }
     #endif
 }

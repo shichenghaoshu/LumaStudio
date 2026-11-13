@@ -23,6 +23,7 @@ import Darwin
         catch { FileHandle.standardError.write(Data(("LumaAgentCLI: "+error.localizedDescription+"\n").utf8));exit(1) }
     }
     static func execute(_ args: [String]) async throws {
+        if try await ProValidation.execute(args) {return}
         guard let command=args.first else { throw LumaError.unsupported("device | analyze IMAGE | plan IMAGE INSTRUCTION [MODEL_PACKAGE] | run IMAGE INSTRUCTION OUTPUT [MODEL_PACKAGE] | render IMAGE RECIPE OUTPUT INSTRUCTION | install-model PACKAGE [ROOT]") }
         if command=="device" { try output(DeviceCapabilityManager().snapshot());return }
         if command=="install-model",args.count>=2 {

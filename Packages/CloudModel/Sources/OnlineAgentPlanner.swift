@@ -38,15 +38,15 @@ public struct OnlineAgentPlanner: AgentPlanner {
     }
     public func plan(_ context: PlanningContext) async throws -> AgentPlan {
         let start=Date()
-        let schema=String(decoding:try RecipeSchema.data,as:UTF8.self)
-        let system="You are LumaStudio's bounded photo parameter planner. Return only one JSON EditRecipe matching this schema. Never output code, file paths, shell commands or unsupported tools. Use the user's instruction and image analysis. Preserve unrelated current parameters. No face: disable beauty. Never beautify if forbidden. Skin texture preservation at least 0.90. Supported masks: face,skin,subject,background; hair/sky unavailable. operations must be []. Schema: "+schema
+        let schema=String(decoding:try JSONSerialization.data(withJSONObject:JSONSerialization.jsonObject(with:RecipeSchema.data)),as:UTF8.self)
+        let system="You are LumaStudio's bounded photo parameter planner. Return only a version:2 JSON field patch matching this schema: include only parameters requested by the user. Omitted fields retain current_recipe. Never output code, file paths, shell commands or unsupported tools. Use the user's instruction and image analysis. Preserve unrelated parameters and lockedParameters; locked fields will be restored by the app. RAW parameters require a RAW source. No face: disable beauty. Never beautify if forbidden. Skin texture preservation at least 0.90. Supported masks: face,skin,subject,background,brush; never invent brush points. Hair/sky unavailable. operations must be []. Schema: "+schema
         let current=context.currentRecipe.flatMap{try? $0.json()}.map{String(decoding:$0,as:UTF8.self)} ?? "null"
         let analysis=String(decoding:try JSONEncoder().encode(context.analysis),as:UTF8.self)
-        let user="instruction: \(context.instruction)\nanalysis: \(analysis)\ncurrent_recipe: \(current)\nreference_profile_id: \(context.referenceProfileID ?? "none")\nPrevious instructions: \(context.previousInstructions.suffix(3).joined(separator:"; "))"
+        let user="instruction: \(context.instruction)\nanalysis: \(analysis)\nsource_format: \(context.sourceFormat ?? "unknown")\navailable_RAW_parameters: \(context.availableRAWParameters?.joined(separator:",") ?? "unknown; use global adjustments")\ncurrent_recipe: \(current)\nreference_profile_id: \(context.referenceProfileID ?? "none")\nPrevious instructions: \(context.previousInstructions.suffix(3).joined(separator:"; "))"
         let request=try makeRequest(system:system,user:user,image:settings.attachPreview ? previewJPEG : nil,maxTokens:2048)
         let data=try await perform(request)
         let output=try Self.outputText(data,style:settings.style)
-        let decoded=try ToolRegistry().decode(Data(output.utf8))
+        let decoded=try ToolRegistry().proposal(Data(output.utf8),preserving:context.currentRecipe)
         var recipe=try IntentSafetyGate.enforce(decoded,context:context)
         if context.analysis.faceCount==0 || InstructionParser.parse(context.instruction).beautyForbidden { recipe.beauty.enabled=false }
         recipe.beauty.texturePreservation=max(0.9,recipe.beauty.texturePreservation)
@@ -66,7 +66,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
         var content: [[String:Any]]=[]
         let imageURL=image.map{"data:image/jpeg;base64,"+$0.base64EncodedString()}
         if let image,image.count>512*1024 { throw LumaError.unsupported("在线预览超过大小限制") }
-        let body: [String:Any]
+        var body: [String:Any]
         if settings.style == .responses {
             content=[["type":"input_text","text":user]]
             if let imageURL { content.append(["type":"input_image","image_url":imageURL,"detail":"low"]) }
@@ -75,6 +75,12 @@ public struct OnlineAgentPlanner: AgentPlanner {
             content=[["type":"text","text":user]]
             if let imageURL { content.append(["type":"image_url","image_url":["url":imageURL,"detail":"low"]]) }
             body=["model":settings.model,"messages":[["role":"system","content":system],["role":"user","content":content]],"response_format":["type":"json_object"],"max_tokens":maxTokens,"stream":false]
+        }
+        // DeepSeek enables thinking by default. These bounded JSON parameter patches
+        // use non-thinking mode so the response budget is available for the actual patch.
+        if settings.provider == .deepseek {
+            if settings.style == .chatCompletions {body["thinking"]=["type":"disabled"]}
+            else {body["reasoning"]=["effort":"none"]}
         }
         request.httpBody=try JSONSerialization.data(withJSONObject:body);return request
     }
@@ -92,7 +98,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
         if style == .chatCompletions,
            let choices=object["choices"] as? [[String:Any]],let choice=choices.first,
            choice["finish_reason"] as? String != "length",let message=choice["message"] as? [String:Any],message["refusal"] as? String == nil,
-           let text=message["content"] as? String,!text.isEmpty { return text }
+           let text=message["content"] as? String,!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty { return text }
         if style == .responses,object["status"] as? String != "incomplete",let output=object["output"] as? [[String:Any]] {
             let texts=output.flatMap{$0["content"] as? [[String:Any]] ?? []}.filter{$0["type"] as? String=="output_text"}.compactMap{$0["text"] as? String}
             if !texts.isEmpty { return texts.joined() }

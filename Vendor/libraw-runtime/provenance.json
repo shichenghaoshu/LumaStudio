@@ -1,0 +1,18 @@
+{
+  "version": "0.22.3",
+  "sourceURL": "https://www.libraw.org/data/LibRaw-0.22.3.tar.gz",
+  "sourceSHA256": "789f3c33466210a1a0907f747a97c715d21bbf4af712f257fcbbd90111b227e4",
+  "licenseChoice": "CDDL-1.0",
+  "architecture": "arm64",
+  "minimumMacOS": "14.0",
+  "sourceModified": false,
+  "externalDependencies": false,
+  "limitations": [
+    "No LibRaw JPEG-lossy-DNG extension; native Apple decoding remains available",
+    "Fallback exposes exposure and camera white balance; Apple-specific RAW controls unavailable"
+  ],
+  "files": {
+    "libraw.dylib": "00d8c2ac5b344c8b37082dc78570d7c29950ee9942796bc7a31dba46b2f95ac0",
+    "luma-raw-decode": "10dfaad121ac7103cb3a80a0819b54d2e2810805c2b6c8a3ff35dff2d40ae310"
+  }
+}

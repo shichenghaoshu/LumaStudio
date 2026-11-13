@@ -16,7 +16,7 @@ public enum InstructionParser {
         else if ["提高饱和","增加饱和","鲜艳","saturate","vivid"].contains(where:positive) { intent.saturationDirection=1 }
         if ["暖一点","暖色","暖调","暖一些","偏暖","warmer","warm"].contains(where:positive) { intent.warmthDirection=1 }
         if ["冷一点","冷色","冷调","偏冷","cooler","cool"].contains(where:positive) { intent.warmthDirection = -1 }
-        intent.beautyForbidden=["不磨皮","不要磨皮","关闭美颜","不要美颜","不用美颜","不美颜","no retouch","no smoothing"].contains(where:t.contains)
+        intent.beautyForbidden=["不磨皮","不要磨皮","不做磨皮","不要做磨皮","关闭美颜","不要美颜","不用美颜","不美颜","不做美颜","不要做美颜","no retouch","no smoothing"].contains(where:t.contains)
         intent.beautyRequested = !intent.beautyForbidden && ["磨皮","美颜","皮肤","肤色","瑕疵","retouch","skin"].contains(where:positive)
         intent.preserveTexture=true
         if ["背景","background"].contains(where:t.contains) { intent.requestedLocalRegion = .background }
@@ -36,8 +36,10 @@ public struct PlanningContext: Codable,Sendable {
     public let currentRecipe: EditRecipe?
     public let referenceProfileID: String?
     public let previousInstructions: [String]
-    public init(instruction: String,analysis: ImageAnalysis,preferences: EditingPreferences,currentRecipe: EditRecipe?=nil,referenceProfileID: String?=nil,previousInstructions: [String]=[]) {
-        self.instruction=instruction;self.analysis=analysis;self.preferences=preferences;self.currentRecipe=currentRecipe;self.referenceProfileID=referenceProfileID;self.previousInstructions=Array(previousInstructions.suffix(3))
+    public let sourceFormat: String?
+    public let availableRAWParameters: [String]?
+    public init(instruction: String,analysis: ImageAnalysis,preferences: EditingPreferences,currentRecipe: EditRecipe?=nil,referenceProfileID: String?=nil,previousInstructions: [String]=[],sourceFormat: String?=nil,availableRAWParameters: [String]?=nil) {
+        self.instruction=instruction;self.analysis=analysis;self.preferences=preferences;self.currentRecipe=currentRecipe;self.referenceProfileID=referenceProfileID;self.previousInstructions=Array(previousInstructions.suffix(3));self.sourceFormat=sourceFormat;self.availableRAWParameters=availableRAWParameters
     }
 }
 public struct LocalRulePlanner: Sendable {
@@ -45,8 +47,8 @@ public struct LocalRulePlanner: Sendable {
     public func plan(_ context: PlanningContext) throws -> EditRecipe {
         let t=context.instruction.lowercased(),intent=InstructionParser.parse(context.instruction)
         let continuation=["再","继续","更","保持","在此基础","a little more","keep"].contains(where:t.contains)
-        var r=continuation ? (context.currentRecipe ?? EditRecipe()) : EditRecipe()
-        if context.preferences.confirmationCount>0 {
+        var r=context.currentRecipe ?? EditRecipe()
+        if context.preferences.confirmationCount>0,context.currentRecipe==nil {
             r.beauty.strength=context.preferences.beautyStrength;r.beauty.texturePreservation=context.preferences.texturePreservation
             if !continuation { r.global.temperature=context.preferences.temperature;r.global.saturation=context.preferences.saturation;r.color.lut=context.preferences.preferredLUT }
         }
@@ -54,7 +56,7 @@ public struct LocalRulePlanner: Sendable {
         else if t.contains("电影") || t.contains("cinematic") { r.global.contrast=1.12;r.global.highlights = -0.15;r.global.blacks=0.04;r.color.lut="film";r.color.intensity=0.45;r.color.grading.shadowSaturation=0.07;r.color.grading.highlightSaturation=0.04 }
         else if t.contains("胶片") || t.contains("film") { r.color.lut="film";r.color.intensity=0.55;r.global.blacks=0.1;r.global.highlights = -0.1 }
         if t.contains("通透") || t.contains("clean") { r.color.lut="clean";r.color.intensity=0.5;r.global.contrast=1.05;r.global.shadows=0.08;r.global.vibrance=0.1 }
-        if t.contains("自然") || t.contains("natural") { r.beauty.strength=min(r.beauty.strength,0.35);r.beauty.texturePreservation=0.96;if continuation { r.color.intensity *= 0.7 } }
+        if t.contains("自然") || t.contains("natural") { r.beauty.strength=min(r.beauty.strength,0.35);r.beauty.texturePreservation=0.96;if ["更自然","再自然","more natural"].contains(where:t.contains) { r.color.intensity *= 0.7 } }
         if intent.beautyRequested,context.analysis.faceCount>0 { r.beauty.enabled=true }
         if intent.beautyForbidden { r.beauty.enabled=false }
         if t.contains("不美白") || t.contains("不要美白") { r.beauty.skinTone=0 }
@@ -73,12 +75,18 @@ public struct LocalRulePlanner: Sendable {
             let local=LocalMask(id:"local_"+region.rawValue,kind:region,adjustments:adjustment)
             r.masks.removeAll{$0.kind==region};r.masks.append(local)
         } else {
-            r.global.exposure=min(3,max(-3,r.global.exposure+adjustment.exposure))
+            r.global.exposure=min(5,max(-5,r.global.exposure+adjustment.exposure))
             if adjustment.saturation != 1 { r.global.saturation=adjustment.saturation }
             if adjustment.temperature != 6500 { r.global.temperature=adjustment.temperature }
             if adjustment.contrast != 1 { r.global.contrast=adjustment.contrast }
             if adjustment.highlights != 0 { r.global.highlights=adjustment.highlights }
             if adjustment.shadows != 0 { r.global.shadows=adjustment.shadows }
+            if ["自动","校正","逐张","auto correct","auto adjust"].contains(where:t.contains),intent.brightnessDirection==0,["曝光","亮度","exposure"].contains(where:t.contains) {
+                let metrics=context.analysis.metrics
+                var ev=min(1.25,max(-1.25,log2(0.46/max(0.03,metrics.meanLuminance))*2.2))
+                if metrics.clippedHighlights>0.02 {ev=min(0,ev)}
+                r.global.exposure=min(5,max(-5,r.global.exposure+Float(ev)))
+            }
         }
         // Explicit EV requests are bounded by the same executable contract as model output.
         if let range=t.range(of:"[+-]?[0-9]+(?:\\.[0-9]+)?\\s*ev",options:.regularExpression),let v=Float(t[range].replacingOccurrences(of:"ev",with:"").trimmingCharacters(in:.whitespaces)) {
@@ -86,6 +94,17 @@ public struct LocalRulePlanner: Sendable {
             else { r.global.exposure=v }
         }
         if t.contains("参考") || t.contains("reference") { r.color.referenceProfileID=context.referenceProfileID }
+        Self.applyExplicitParameters(context.instruction,to:&r)
+        r=ParameterLockPolicy.applying(r,preserving:context.currentRecipe)
+        if intent.beautyForbidden || context.analysis.faceCount==0 {r.beauty.enabled=false}
         r.operations=[];try r.validateParameters();return r
+    }
+    public static func applyExplicitParameters(_ text: String,to recipe: inout EditRecipe) {
+        for p in ParameterCatalog.all {
+            if ParameterCatalog.all.contains(where:{$0.title.count>p.title.count && $0.title.contains(p.title) && text.contains($0.title)}) {continue}
+            let pattern=NSRegularExpression.escapedPattern(for:p.title)+"\\s*(?:设为|设置为|调到|调整到|=|：|:)?\\s*([+-]?[0-9]+(?:\\.[0-9]+)?)"
+            guard let regex=try? NSRegularExpression(pattern:pattern),let match=regex.firstMatch(in:text,range:NSRange(text.startIndex...,in:text)),let range=Range(match.range(at:1),in:text),let number=Float(text[range]) else {continue}
+            p.write(&recipe,p.bounded((number-p.offset)/p.scale))
+        }
     }
 }

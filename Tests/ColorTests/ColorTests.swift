@@ -8,9 +8,27 @@ final class ColorTests: XCTestCase {
             let back=Lab.from(c).rgb();XCTAssertEqual(c.r,back.r,accuracy:0.0001);XCTAssertEqual(c.g,back.g,accuracy:0.0001);XCTAssertEqual(c.b,back.b,accuracy:0.0001)
         }
     }
-    func testLUTRoundTripAndSixPresets() throws {
-        XCTAssertEqual(FilterPreset.allCases.count,6)
+    func testLUTRoundTripAndThirtyDistinctPresets() throws {
+        XCTAssertEqual(FilterPreset.allCases.count,30)
+        XCTAssertEqual(FilterPreset.allCases.map(\.id),FilterIdentifiers.builtIn)
+        XCTAssertEqual(Set(try FilterPreset.allCases.map{try $0.lut().values}).count,30)
         for p in FilterPreset.allCases {let l=try p.lut();let decoded=try LUT3D(cube:l.cube(title:p.name));XCTAssertEqual(l.dimension,17);XCTAssertEqual(l.values,decoded.values)}
+    }
+    func testImportedCUBEIsAddressedByHashAndRejectsTampering() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent("LumaLUT-"+UUID().uuidString)
+        defer{try? FileManager.default.removeItem(at:root)}
+        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+        let input=root.appendingPathComponent("Original.cube"),store=root.appendingPathComponent("store")
+        try FilterPreset.warm.lut().cube(title:"Test").write(to:input,atomically:true,encoding:.utf8)
+        let record=try UserFilterLibrary.importCube(input,at:store)
+        XCTAssertTrue(FilterIdentifiers.isValid(record.id));XCTAssertEqual(UserFilterLibrary.all(at:store),[record])
+        XCTAssertEqual(try UserFilterLibrary.load(id:record.id,at:store).dimension,17)
+        XCTAssertEqual(try UserFilterLibrary.importCube(input,at:store).id,record.id)
+        try "modified".write(to:store.appendingPathComponent(record.id+".cube"),atomically:true,encoding:.utf8)
+        XCTAssertThrowsError(try UserFilterLibrary.load(id:record.id,at:store))
+        _=try UserFilterLibrary.importCube(input,at:store)
+        XCTAssertEqual(try UserFilterLibrary.load(id:record.id,at:store).dimension,17)
+        XCTAssertThrowsError(try UserFilterLibrary.load(id:"../../original",at:store))
     }
     func testMalformedLUTRejected() {
         for s in ["LUT_3D_SIZE 100000", "LUT_3D_SIZE 2\n1 2 3", "LUT_3D_SIZE 2\nNaN 0 0"] {XCTAssertThrowsError(try LUT3D(cube:s))}
@@ -33,7 +51,7 @@ final class ColorTests: XCTestCase {
         {"version":1,"beauty":{"enabled":true,"strength":0.35,"skinTone":0.25,"blemishRemoval":0.2},"color":{"enabled":true,"presetID":"portrait","intensity":0.8,"referenceProfileID":null},"export":{"format":"jpeg","quality":0.95}}
         """
         var recipe=try JSONDecoder().decode(Recipe.self,from:Data(json.utf8));XCTAssertEqual(recipe.color.contrast,1);recipe.beauty.strength=5
-        XCTAssertEqual(try recipe.validated().beauty.strength,1);recipe.version=2;XCTAssertThrowsError(try recipe.validated())
+        XCTAssertEqual(try recipe.validated().beauty.strength,1);recipe.version=3;XCTAssertThrowsError(try recipe.validated())
     }
 }
 extension ColorTests {

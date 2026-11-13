@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 import PhotoDomain
 
 public enum PlannerMode: String,Codable,CaseIterable,Sendable { case local,online }
@@ -37,25 +38,43 @@ public enum ServiceEndpoint {
 /// Secrets are never Codable, logged, or written to project files.
 public enum IntegrationCredentials {
     private static let service="studio.luma.integrations"
-    public static func read(_ account: String) throws -> String? {
-        let q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account,kSecReturnData as String:true,kSecMatchLimit as String:kSecMatchLimitOne]
+    private static let accessLock=NSLock()
+    private static func access<T>(_ allowUI: Bool=false,_ operation: ()throws->T) rethrows -> T {
+        accessLock.lock();defer{accessLock.unlock()}
+        #if os(macOS)
+        // The legacy macOS keychain ignores kSecUseAuthenticationUI on some
+        // systems. Never let an ad-hoc build wait indefinitely for a system prompt.
+        var previous: DarwinBoolean=true
+        SecKeychainGetUserInteractionAllowed(&previous)
+        if !allowUI {SecKeychainSetUserInteractionAllowed(false)}
+        defer{if !allowUI {SecKeychainSetUserInteractionAllowed(previous.boolValue)}}
+        #endif
+        return try operation()
+    }
+    private static func failure(_ status: OSStatus)->LumaError {
+        if status==errSecInteractionNotAllowed || status==errSecAuthFailed {return .unsupported("钥匙串需要系统授权；可填写密钥并选择“本次会话使用”继续")}
+        return .unsupported("系统钥匙串访问未完成（\(status)）")
+    }
+    public static func read(_ account: String,allowAuthenticationUI: Bool=false) throws -> String? {try access(allowAuthenticationUI) {
+        var q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account,kSecReturnData as String:true,kSecMatchLimit as String:kSecMatchLimitOne]
+        if !allowAuthenticationUI {let context=LAContext();context.interactionNotAllowed=true;q[kSecUseAuthenticationContext as String]=context}
         var result: CFTypeRef?;let status=SecItemCopyMatching(q as CFDictionary,&result)
         if status==errSecItemNotFound { return nil }
-        guard status==errSecSuccess,let data=result as? Data else { throw LumaError.unsupported("无法读取系统钥匙串（\(status)）") }
+        guard status==errSecSuccess,let data=result as? Data else { throw failure(status) }
         return String(data:data,encoding:.utf8)
-    }
-    public static func save(_ value: String,account: String) throws {
+    } }
+    public static func save(_ value: String,account: String) throws {try access {
         guard !value.isEmpty,value.count<=8192,!value.contains("\n"),!value.contains("\r") else { throw LumaError.unsupported("密钥或连接地址格式无效") }
         let q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account]
         let data=Data(value.utf8),status=SecItemUpdate(q as CFDictionary,[kSecValueData as String:data] as CFDictionary)
         if status==errSecItemNotFound {
             var add=q;add[kSecValueData as String]=data;add[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            guard SecItemAdd(add as CFDictionary,nil)==errSecSuccess else { throw LumaError.unsupported("无法保存到系统钥匙串") }
-        } else if status != errSecSuccess { throw LumaError.unsupported("无法更新系统钥匙串（\(status)）") }
-    }
-    public static func remove(_ account: String) throws {
+            let added=SecItemAdd(add as CFDictionary,nil);guard added==errSecSuccess else { throw failure(added) }
+        } else if status != errSecSuccess { throw failure(status) }
+    } }
+    public static func remove(_ account: String) throws {try access {
         let q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account]
         let status=SecItemDelete(q as CFDictionary)
-        guard status==errSecSuccess || status==errSecItemNotFound else { throw LumaError.unsupported("无法移除保存的凭据") }
-    }
+        guard status==errSecSuccess || status==errSecItemNotFound else { throw failure(status) }
+    } }
 }

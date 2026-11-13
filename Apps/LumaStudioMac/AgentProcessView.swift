@@ -112,7 +112,7 @@ struct AgentProcessWorkspace: View {
     private var executionRail: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:0) {
-                HStack { Text("执行步骤").font(.system(size:12,weight:.semibold));Spacer();Text("LOCAL").font(.system(size:9,weight:.medium,design:.monospaced)).tracking(1.5).foregroundStyle(.secondary) }
+                HStack { Text("执行步骤").font(.system(size:12,weight:.semibold));Spacer();Text("执行记录").font(.system(size:9,weight:.medium,design:.monospaced)).tracking(1.5).foregroundStyle(.secondary) }
                     .padding(.bottom,20)
                 if !model.agentInstruction.isEmpty {
                     Text("你的要求").font(.system(size:10)).foregroundStyle(.secondary).padding(.bottom,7)
@@ -331,7 +331,7 @@ struct AgentProcessWorkspace: View {
                 Toggle("自动修正",isOn:$model.automaticCorrection).toggleStyle(.checkbox).font(.system(size:10)).disabled(model.agentBusy)
                 Text("每轮检查，最多修正 2 轮").font(.system(size:10)).foregroundStyle(.secondary)
                 Spacer()
-                Text("本机渲染 · 效果由你确认").font(.system(size:10)).foregroundStyle(.secondary)
+                Text("已锁定 \(model.recipe.document.lockedParameters.count) 项 · 本机渲染").font(.system(size:10)).foregroundStyle(.secondary)
             }
         }.padding(.horizontal,24).padding(.vertical,18)
     }

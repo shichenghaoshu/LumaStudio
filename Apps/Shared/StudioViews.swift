@@ -3,15 +3,14 @@ import PhotoCore
 import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 
-let studioAccent=Color(red:0.91,green:0.72,blue:0.43)
+let studioAccent=Color(red:0.98,green:0.84,blue:0.18)
 struct StudioRoot: View {
     @ObservedObject var model: AppModel
     var body: some View {
         Group {
             #if os(macOS)
             HStack(spacing:0) {
-                MacWorkspaceRail(model:model)
-                Divider()
+                if model.page != .edit {MacWorkspaceRail(model:model);Divider()}
                 pageContent.frame(maxWidth:.infinity,maxHeight:.infinity)
             }.background(Color(white:0.08))
             #else
@@ -22,6 +21,7 @@ struct StudioRoot: View {
             }
             #endif
         }
+        .disabled(model.workflowBusy)
         .tint(studioAccent)
         #if !os(macOS)
         .fileImporter(isPresented:$model.importerPresented,allowedContentTypes:model.importTypes,allowsMultipleSelection:model.importMultiple,onCompletion:model.handleImport)
@@ -31,6 +31,7 @@ struct StudioRoot: View {
         .sheet(isPresented:$model.modelManagerPresented) { LocalModelsPanel(model:model) }
         #if os(macOS)
         .sheet(isPresented:$model.integrationsPresented) { IntegrationSettingsView(model:model) }
+        .sheet(isPresented:$model.recipeSyncPresented) { RecipeSyncSheet(model:model) }
         #endif
         .overlay(alignment:.bottom) {
             if model.importing { HStack{ProgressView().controlSize(.small);Text(model.importProgress).font(.callout)}.padding(12).background(.regularMaterial,in:Capsule()).padding(.bottom,12) }
@@ -149,7 +150,7 @@ struct EditControls: View {
         Slider(value:$model.recipe.color.intensity,in:0...1).accessibilityLabel("滤镜强度")
     } }
     func swatch(_ preset: FilterPreset)->[Color] {
-        switch preset {case .natural:return [.init(red:0.55,green:0.61,blue:0.48),.init(red:0.79,green:0.67,blue:0.48)];case .portrait:return [.init(red:0.75,green:0.51,blue:0.46),.init(red:0.86,green:0.74,blue:0.63)];case .film:return [.init(red:0.2,green:0.36,blue:0.34),.init(red:0.67,green:0.48,blue:0.31)];case .warm:return [.init(red:0.77,green:0.42,blue:0.21),.init(red:0.93,green:0.73,blue:0.39)];case .cool:return [.init(red:0.22,green:0.39,blue:0.57),.init(red:0.58,green:0.74,blue:0.79)];case .clean:return [.init(red:0.56,green:0.71,blue:0.65),.init(red:0.9,green:0.9,blue:0.79)]}
+        switch preset {case .natural:return [.init(red:0.55,green:0.61,blue:0.48),.init(red:0.79,green:0.67,blue:0.48)];case .portrait:return [.init(red:0.75,green:0.51,blue:0.46),.init(red:0.86,green:0.74,blue:0.63)];case .film:return [.init(red:0.2,green:0.36,blue:0.34),.init(red:0.67,green:0.48,blue:0.31)];case .warm:return [.init(red:0.77,green:0.42,blue:0.21),.init(red:0.93,green:0.73,blue:0.39)];case .cool:return [.init(red:0.22,green:0.39,blue:0.57),.init(red:0.58,green:0.74,blue:0.79)];default:return [.init(red:0.56,green:0.71,blue:0.65),.init(red:0.9,green:0.9,blue:0.79)]}
     }
     var reference: some View { VStack(alignment:.leading,spacing:12) {
         Text("参考色彩").font(.headline)
@@ -189,14 +190,57 @@ struct LabeledSlider: View {
 struct BatchWorkspace: View {
     @ObservedObject var model: AppModel
     var body: some View { VStack(spacing:0) {
-        StudioHeader(title:"批量修图",subtitle:"当前编辑配方 · \(model.recipe.color.presetID?.capitalized ?? "Natural") · 美颜 \(model.recipe.beauty.enabled ? "\(Int(model.recipe.beauty.strength*100))%" : "关闭")") {
-            HStack(spacing:16){ImportButtons(model:model);Button("全选"){model.selection=Set(model.assets.map(\.id))};Button("清空"){model.selection=[]};Menu{Button("处理并导出到本地图库"){model.batchToLibrary()};Button("选择输出文件夹…"){model.choose(.exportBatch)}}label:{Text("处理并导出")}primaryAction:{model.batchToLibrary()}.fixedSize().buttonStyle(.borderedProminent).disabled(model.selection.isEmpty || model.batchSnapshot?.active==true)}
+        StudioHeader(title:"批量修图",subtitle:"已选 \(model.selection.count) 张 · \(model.batchMode.rawValue)") {
+            HStack(spacing:16){ImportButtons(model:model);Button("全选可见"){model.selection=Set(model.visibleAssets.map(\.id))};Button("清空"){model.selection=[]};Menu{Button("处理并导出到本地图库"){model.batchToLibrary()};Button("选择输出文件夹…"){model.choose(.exportBatch)}}label:{Text(model.batchPreparing ? "正在准备…" : "处理并导出")}primaryAction:{model.batchToLibrary()}.fixedSize().buttonStyle(.borderedProminent).disabled(model.selection.isEmpty || model.batchSnapshot?.active==true || model.batchPreparing || model.workflowBusy)}
         };Divider()
-        if model.assets.isEmpty {ContentUnavailableView("导入一组照片",systemImage:"square.grid.2x2",description:Text("先在修图页预览一张，再把同一配方应用到所选照片。"))}
-        else {ScrollView{LazyVGrid(columns:[GridItem(.adaptive(minimum:140,maximum:210))],spacing:16){ForEach(model.assets){asset in Button{if model.selection.contains(asset.id){model.selection.remove(asset.id)}else{model.selection.insert(asset.id)}}label:{PhotoThumbnail(asset:asset,selected:model.selection.contains(asset.id)).overlay(alignment:.topLeading){Image(systemName:model.selection.contains(asset.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(model.selection.contains(asset.id) ? studioAccent : .secondary).padding(10)}}.buttonStyle(.plain)}}.padding(24)}}
+        #if os(macOS)
+        PhotoWorkflowToolbar(model:model)
+        Divider()
+        #endif
+        VStack(alignment:.leading,spacing:10) {
+            HStack {
+                Picker("处理方式",selection:$model.batchMode){ForEach(AppModel.BatchMode.allCases){Text($0.rawValue).tag($0)}}.pickerStyle(.segmented).frame(maxWidth:450)
+                Spacer()
+                if model.batchAIEnabled {Button(model.cloudSettings.mode == .online ? model.cloudSettings.provider.title+" · "+model.cloudSettings.model : "本地方案"){model.integrationsPresented=true}.font(.caption)}
+                Text(model.batchMode == .saved ? "保留每张照片独立的构图、局部与输出设置" : "原片保留 · 每张独立导出").font(.caption).foregroundStyle(.secondary)
+            }
+            if model.batchAIEnabled {
+                TextField("对这组照片的修图要求",text:$model.batchInstruction,axis:.vertical).textFieldStyle(.roundedBorder).lineLimit(2...3).accessibilityLabel("批量 AI 修图要求")
+                Text("逐张分析、生成方案、检查并导出。在线模式会发送要求和分析指标；附图设置与接入页一致。重试会复用已保存的方案。").font(.caption).foregroundStyle(.secondary)
+            }
+        }.padding(.horizontal,24).padding(.vertical,14).disabled(model.batchSnapshot?.active==true || model.batchPreparing)
+        Divider()
+        if model.assets.isEmpty {ContentUnavailableView("导入一组照片",systemImage:"square.grid.2x2",description:Text("支持系统可解码的照片和多品牌 RAW。选择统一配方或逐张 AI 调整后导出。"))}
+        else if model.visibleAssets.isEmpty {ContentUnavailableView("没有符合筛选的照片",systemImage:"line.3.horizontal.decrease.circle",description:Text("调整星标、旗标或文件名筛选。"))}
+        else {ScrollView{LazyVGrid(columns:[GridItem(.adaptive(minimum:140,maximum:210))],spacing:16){ForEach(model.visibleAssets){asset in
+            VStack(spacing:4) {
+                Button{if model.selection.contains(asset.id){model.selection.remove(asset.id)}else{model.selection.insert(asset.id)}}label:{PhotoThumbnail(asset:asset,selected:model.selection.contains(asset.id)).overlay(alignment:.topLeading){Image(systemName:model.selection.contains(asset.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(model.selection.contains(asset.id) ? studioAccent : .secondary).padding(10)}}.buttonStyle(.plain).accessibilityLabel("选择批量照片 "+asset.name)
+                #if os(macOS)
+                HStack {PhotoReviewBadge(review:model.review(for:asset.id));Spacer();PhotoReviewMenu(model:model,ids:[asset.id])}.font(.caption2).padding(.horizontal,8)
+                #endif
+            }
+        }}.padding(24)}}
         if let s=model.batchSnapshot {Divider();VStack(alignment:.leading,spacing:12) {
             HStack{Text(s.active ? (s.paused ? "已暂停 · 当前照片完成后等待" : "正在处理") : (s.cancelled ? "已取消" : "任务结束")).font(.headline);Spacer();Text("完成 \(s.completed) / \(s.items.count) · 失败 \(s.failures)").font(.caption).monospacedDigit()}
             ProgressView(value:s.progress)
+            if s.aiInstruction != nil {
+                ScrollView {
+                    VStack(alignment:.leading,spacing:8) {
+                        ForEach(s.items) {item in
+                            HStack(alignment:.top,spacing:12) {
+                                Image(systemName:item.state == .completed ? "checkmark.circle.fill" : (item.state == .failed ? "exclamationmark.circle" : "circle.dotted")).foregroundStyle(item.state == .completed ? studioAccent : .secondary)
+                                VStack(alignment:.leading,spacing:3) {
+                                    Text(item.name).font(.caption).lineLimit(1)
+                                    if let plan=item.plan {Text(plan.source).font(.caption2).foregroundStyle(.secondary);if let reason=plan.fallbackReason {Text(reason).font(.caption2).foregroundStyle(.orange)}}
+                                }
+                                Spacer()
+                                Text(batchStatus(item)).font(.caption).foregroundStyle(.secondary)
+                                if item.plan != nil {Button("载入方案"){model.loadBatchPlan(item)}.font(.caption).disabled(model.agentBusy)}
+                            }
+                        }
+                    }
+                }.frame(maxHeight:140)
+            }
             HStack{
                 if s.active {Button(s.paused ? "继续" : "暂停"){if s.paused{model.resumeBatch()}else{model.pauseBatch()}};Button("取消",role:.destructive){model.cancelBatch()}}
                 else if s.failures>0 || s.cancelled {Button("重试未完成"){model.retryBatch()}}
@@ -206,11 +250,20 @@ struct BatchWorkspace: View {
             if let failure=s.items.first(where:{$0.state == .failed}) {Text("\(failure.name)：\(failure.error ?? "失败")").font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
         }.padding(20).background(Color(white:0.1))}
     } }
+    private func batchStatus(_ item: BatchItem)->String {
+        switch item.state {
+        case .pending:return "等待"
+        case .running:return item.phase == .exporting ? "正在导出" : "分析与生成方案"
+        case .completed:return "已导出"
+        case .failed:return "失败，可重试"
+        case .cancelled:return "已取消"
+        }
+    }
 }
 struct CaptureWorkspace: View {
     @ObservedObject var model: AppModel
     var body: some View { VStack(spacing:0) {
-        StudioHeader(title:"联机拍摄",subtitle:"PANASONIC LUMIX DC-G9 · 第一代") {Button{model.syncPresented=true}label:{Label("Mac ↔ iPad",systemImage:"wifi")}}
+        StudioHeader(title:"联机拍摄",subtitle:"多品牌照片 · 文件夹监听 / 系统 USB 导入") {Button{model.syncPresented=true}label:{Label("Mac ↔ iPad",systemImage:"wifi")}}
         Divider()
         #if os(macOS)
         MacCapturePanel(model:model,tether:model.tether,native:model.native)
@@ -227,7 +280,7 @@ struct MacCapturePanel: View {
     @ObservedObject var native: NativeCameraAdapter
     @State private var nativeEnabled=false
     var body: some View { HStack(spacing:0) {
-        VStack(spacing:20){Spacer();Image(systemName:"camera").font(.system(size:68,weight:.ultraLight)).foregroundStyle(studioAccent);Text("在 LUMIX Tether 中取景与拍摄").font(.title2.weight(.light));Text("USB → PC(Tether) → 保存至监听目录\n新照片会自动导入这里").multilineTextAlignment(.center).foregroundStyle(.secondary);HStack{Button("打开 LUMIX Tether"){let app=NSWorkspace.shared.urlForApplication(withBundleIdentifier:"com.panasonic.LUMIXTether");if let app{NSWorkspace.shared.open(app)}else{NSWorkspace.shared.open(URL(string:"https://av.jpn.support.panasonic.com/support/global/cs/soft/download/d_lumixtether.html")!)}}.controlSize(.large);Button("打开监听目录"){NSWorkspace.shared.open(model.inbox)}};Text("LumaStudio 尚未提供 G9 内嵌实时取景").font(.caption).foregroundStyle(.secondary);Spacer()}.frame(maxWidth:.infinity).padding(30).background(Color(white:0.045))
+        VStack(spacing:20){Spacer();Image(systemName:"camera").font(.system(size:68,weight:.ultraLight)).foregroundStyle(studioAccent);Text("从相机软件接收新照片").font(.title2.weight(.light));Text("在相机厂商软件中，将照片保存到下方监听目录\n支持 Canon、Nikon、Sony、Fujifilm、Olympus、Leica、Pentax 与 Panasonic 等 RAW 候选格式；实际解码取决于系统对机型的支持。").multilineTextAlignment(.center).foregroundStyle(.secondary);HStack{Button("打开 LUMIX Tether"){let app=NSWorkspace.shared.urlForApplication(withBundleIdentifier:"com.panasonic.LUMIXTether");if let app{NSWorkspace.shared.open(app)}else{NSWorkspace.shared.open(URL(string:"https://av.jpn.support.panasonic.com/support/global/cs/soft/download/d_lumixtether.html")!)}}.controlSize(.large);Button("打开监听目录"){NSWorkspace.shared.open(model.inbox)}};Text("取景与拍摄参数由相机软件控制；可用 USB 能力以设备检测为准。").font(.caption).foregroundStyle(.secondary);Spacer()}.frame(maxWidth:.infinity).padding(30).background(Color(white:0.045))
         Divider()
         ScrollView{VStack(alignment:.leading,spacing:22){
             Label(tether.status,systemImage:"folder.badge.gearshape").font(.callout)

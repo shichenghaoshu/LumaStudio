@@ -3,6 +3,8 @@ import SwiftData
 import ImageIO
 import CryptoKit
 import PhotoDomain
+import PhotoPipeline
+import CoreImage
 
 @Model final class StoredPhoto {
     @Attribute(.unique) var id: UUID
@@ -14,6 +16,8 @@ import PhotoDomain
     var sourceModified: Date
     var importedAt: Date
     var recipeData: Data?
+    // Optional so existing libraries migrate without changing photo or recipe data.
+    var reviewData: Data?
     init(id: UUID, name: String, primary: String, thumbnail: String, pairKey: String, modified: Date) {
         self.id = id; self.name = name; self.primaryPath = primary; self.thumbnailPath = thumbnail
         self.pairKey = pairKey; self.sourceModified = modified; self.importedAt = Date()
@@ -75,7 +79,13 @@ public actor PhotoLibrary: ModelActor {
             let photoID = existing.photoID
             if let photo = try context.fetch(FetchDescriptor<StoredPhoto>(predicate: #Predicate { $0.id == photoID })).first { return ImportResult(asset: asset(photo), duplicate: true) }
         }
-        guard let imageSource = CGImageSourceCreateWithURL(staging as CFURL, nil), CGImageSourceGetStatus(imageSource) == .statusComplete, let thumb = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 360] as CFDictionary) else { throw LumaError.invalidImage(source.lastPathComponent) }
+        let thumb: CGImage
+        if let imageSource=CGImageSourceCreateWithURL(staging as CFURL,nil),CGImageSourceGetStatus(imageSource) == .statusComplete,let image=CGImageSourceCreateThumbnailAtIndex(imageSource,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:360] as CFDictionary) {thumb=image}
+        else if PhotoFileType.isRAW(staging) {
+            let decoded=try ImageDecoder().decode(staging,tier:.thumbnail)
+            guard let image=CIContext().createCGImage(decoded,from:decoded.extent) else {throw LumaError.invalidImage(source.lastPathComponent)}
+            thumb=image
+        } else {throw LumaError.invalidImage(source.lastPathComponent)}
         let ext = source.pathExtension.lowercased()
         let primary = "Originals/\(digest).\(ext)"
         let destination = root.appendingPathComponent(primary)
@@ -104,12 +114,74 @@ public actor PhotoLibrary: ModelActor {
         return ImportResult(asset: asset(stored), duplicate: false)
     }
     public func saveRecipe(_ recipe: Recipe, for id: UUID) throws {
-        guard let photo = try context.fetch(FetchDescriptor<StoredPhoto>(predicate: #Predicate { $0.id == id })).first else { return }
-        photo.recipeData = try recipe.json(); try context.save()
+        guard let photo = try context.fetch(FetchDescriptor<StoredPhoto>(predicate: #Predicate { $0.id == id })).first else { throw LumaError.corruptData("照片已不在当前图库") }
+        let data = try recipe.json()
+        photo.recipeData = data
+        do { try context.save() } catch { context.rollback(); throw error }
     }
     public func recipe(for id: UUID) throws -> Recipe {
         guard let photo = try context.fetch(FetchDescriptor<StoredPhoto>(predicate: #Predicate { $0.id == id })).first, let data = photo.recipeData else { return Recipe() }
         return try JSONDecoder().decode(Recipe.self, from: data).validated()
+    }
+    public func reviews() throws -> [UUID: PhotoReview] {
+        var result = [UUID: PhotoReview]()
+        for photo in try context.fetch(FetchDescriptor<StoredPhoto>()) {
+            if let data = photo.reviewData { result[photo.id] = try JSONDecoder().decode(PhotoReview.self, from: data).validated() }
+        }
+        return result
+    }
+    public func updateReviews(for ids: Set<UUID>, rating: Int? = nil, flag: PhotoFlag? = nil) throws {
+        if let rating, !(0...5).contains(rating) { throw LumaError.corruptData("星标需在 0–5 之间") }
+        let photos = try photos(matching: ids)
+        // Prepare everything before mutating the context, including corrupt-data checks.
+        let updates = try photos.map { photo -> (StoredPhoto, Data) in
+            var review = try photo.reviewData.map { try JSONDecoder().decode(PhotoReview.self, from: $0).validated() } ?? PhotoReview()
+            if let rating { review.rating = rating }; if let flag { review.flag = flag }
+            return (photo, try JSONEncoder().encode(review))
+        }
+        for (photo, data) in updates { photo.reviewData = data }
+        do { try context.save() } catch { context.rollback(); throw error }
+    }
+    public func synchronizeRecipe(_ source: Recipe, from sourceID: UUID, to ids: Set<UUID>, groups: Set<RecipeSyncGroup>) throws -> RecipeSyncTransaction {
+        guard !groups.isEmpty else { throw LumaError.unsupported("请至少选择一个参数分组") }
+        _ = try photos(matching: [sourceID])
+        let targets = try photos(matching: ids.subtracting([sourceID]))
+        guard !targets.isEmpty else { throw LumaError.unsupported("请选择当前照片以外的目标照片") }
+        var changes = [RecipeSyncChange](), updates = [(StoredPhoto, Data)]()
+        for photo in targets {
+            let before = try decodedRecipe(photo)
+            let after = try RecipeSynchronization.applying(source, to: before, groups: groups, targetIsRAW: PhotoFileType.isRAW(URL(fileURLWithPath: photo.primaryPath)))
+            if after != before {
+                changes.append(RecipeSyncChange(id: photo.id, before: before, after: after))
+                updates.append((photo, try after.json()))
+            }
+        }
+        for (photo, data) in updates { photo.recipeData = data }
+        do { try context.save() } catch { context.rollback(); throw error }
+        let skipped = groups.contains(.raw) ? targets.filter { !PhotoFileType.isRAW(URL(fileURLWithPath: $0.primaryPath)) }.count : 0
+        return RecipeSyncTransaction(sourceID: sourceID, changes: changes, skippedRAWCount: skipped)
+    }
+    /// Compare every target before restoring any of them. Later edits must never be lost.
+    public func undoSynchronization(_ transaction: RecipeSyncTransaction) throws {
+        let targets = try photos(matching: Set(transaction.changes.map(\.id)))
+        var updates = [(StoredPhoto, Data)]()
+        for change in transaction.changes {
+            guard let photo = targets.first(where: { $0.id == change.id }), try decodedRecipe(photo) == change.after else {
+                throw LumaError.unsupported("同步后有照片被再次编辑，无法整组撤回。请保留后续修改，使用单张编辑调整。")
+            }
+            updates.append((photo, try change.before.json()))
+        }
+        for (photo, data) in updates { photo.recipeData = data }
+        do { try context.save() } catch { context.rollback(); throw error }
+    }
+    private func decodedRecipe(_ photo: StoredPhoto) throws -> Recipe {
+        guard let data = photo.recipeData else { return Recipe() }
+        return try JSONDecoder().decode(Recipe.self, from: data).validated()
+    }
+    private func photos(matching ids: Set<UUID>) throws -> [StoredPhoto] {
+        let result = try context.fetch(FetchDescriptor<StoredPhoto>()).filter { ids.contains($0.id) }
+        guard result.count == ids.count else { throw LumaError.corruptData("所选照片已不在当前图库，请刷新后重试") }
+        return result
     }
     public func storeRecipe(_ recipe: Recipe, named name: String) throws -> URL {
         let url = root.appendingPathComponent("Recipes/\(Self.safeName(name)).json")

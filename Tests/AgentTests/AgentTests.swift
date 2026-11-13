@@ -11,7 +11,7 @@ final class AgentTests: XCTestCase {
         XCTAssertThrowsError(try ToolRegistry().decode(JSONSerialization.data(withJSONObject:root)))
         root.removeValue(forKey:"shell");root["global"]=["exposure":true]
         XCTAssertThrowsError(try ToolRegistry().decode(JSONSerialization.data(withJSONObject:root)))
-        root["global"]=["exposure":4]
+        root["global"]=["exposure":5.01]
         XCTAssertThrowsError(try ToolRegistry().decode(JSONSerialization.data(withJSONObject:root)))
         root["global"]=["exposure":0];root["operations"]=[["tool":"shell.exec"]]
         XCTAssertThrowsError(try ToolRegistry().decode(JSONSerialization.data(withJSONObject:root)))
@@ -36,6 +36,10 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(a.brightnessDirection,-1);XCTAssertTrue(a.beautyForbidden);XCTAssertFalse(a.beautyRequested)
         XCTAssertEqual(a.requestedLocalRegion,.background)
         XCTAssertEqual(InstructionParser.parse("不要压暗，亮一点").brightnessDirection,1)
+        for text in ["自然提亮，不做美颜", "校正白平衡，不做磨皮", "不要做美颜", "不要做磨皮"] {
+            let intent=InstructionParser.parse(text)
+            XCTAssertTrue(intent.beautyForbidden,text);XCTAssertFalse(intent.beautyRequested,text)
+        }
     }
     func testGrammarConstrainsActualFieldNames() throws {
         let grammar=try EditRecipeGrammar.make()
@@ -109,6 +113,27 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(observed.events.first?.stage,.analysis);XCTAssertEqual(observed.events.first?.kind,.started)
         XCTAssertTrue(observed.roundIndices.isEmpty)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath:directory.path).isEmpty)
+    }
+    func testAutomaticExposureAndWhiteBalanceAreNotDiscardedByNoBeautyConstraint() throws {
+        let ci=CIImage(color:CIColor(red:0.12,green:0.13,blue:0.14)).cropped(to:CGRect(x:0,y:0,width:48,height:32)),image=CIContext().createCGImage(ci,from:ci.extent)!
+        let analysis=ImageAnalysis(image:image,faceCount:0,metrics:try PixelMetrics.measure(image))
+        let context=PlanningContext(instruction:"逐张自动校正曝光与白平衡，不要美颜",analysis:analysis,preferences:EditingPreferences(),currentRecipe:EditRecipe())
+        var proposed=EditRecipe();proposed.global.exposure=0.72;proposed.global.temperature=6100
+        let gated=try IntentSafetyGate.enforce(proposed,context:context)
+        XCTAssertEqual(gated.global.exposure,0.72);XCTAssertEqual(gated.global.temperature,6100)
+        XCTAssertGreaterThan(try LocalRulePlanner().plan(context).global.exposure,0.5)
+    }
+    func testSessionHonorsLocksThroughEvaluationAndNoBeautyOverridesEnabledLock() async throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true);defer{try? FileManager.default.removeItem(at:root)}
+        let source=root.appendingPathComponent("gray.jpg"),ci=CIImage(color:CIColor(red:0.35,green:0.35,blue:0.35)).cropped(to:CGRect(x:0,y:0,width:48,height:32))
+        try CIContext().writeJPEGRepresentation(of:ci,to:source,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!)
+        struct AdversarialPlanner: AgentPlanner {
+            func plan(_ context: PlanningContext) async throws -> AgentPlan {var recipe=EditRecipe();recipe.global.exposure=4;recipe.beauty.enabled=true;return AgentPlan(recipe:recipe,source:"unit-test adversarial",planningMilliseconds:0)}
+        }
+        var current=EditRecipe();current.global.exposure = -0.4;current.beauty.enabled=true;current.lockedParameters=["global.exposure","beauty.enabled"]
+        let session=AgentSession(engine:NativeImageEngine(processor:try PhotoProcessor()),planner:AdversarialPlanner(),history:try LocalHistoryStore(root:root.appendingPathComponent("history")))
+        let output=try await session.run(asset:PhotoAsset(name:"gray",originalURL:source,thumbnailURL:source),instruction:"提亮，但不要美颜",currentRecipe:current)
+        XCTAssertTrue(output.run.rounds.allSatisfy{$0.recipe.global.exposure == -0.4 && !$0.recipe.beauty.enabled})
     }
     func testNativeQwenProducesExecutableRecipeWhenFixtureInstalled() async throws {
         guard let package=ProcessInfo.processInfo.environment["LUMA_AGENT_MODEL_PACKAGE"],let photo=ProcessInfo.processInfo.environment["LUMA_PORTRAIT_FIXTURE"] else { throw XCTSkip("Native model integration fixture is optional") }
