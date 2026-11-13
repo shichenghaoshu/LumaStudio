@@ -38,9 +38,6 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter analyze --no-pub
           flutter test --no-pub
-      - name: Build Windows x64 Release
-        working-directory: Apps/LumaStudioCross
-        run: flutter build windows --release
       - name: Exercise the actual Windows editor window
         working-directory: Apps/LumaStudioCross
         run: |
@@ -53,6 +50,9 @@ jobs:
           name: Windows-UI-validation-log
           path: ${{ runner.temp }}/windows-ui-test.log
           if-no-files-found: ignore
+      - name: Build Windows x64 Release
+        working-directory: Apps/LumaStudioCross
+        run: flutter build windows --release
       - name: Run the compiled Windows application self-test
         run: |
           Remove-Item Env:LUMA_NATIVE_LIBRARY -ErrorAction SilentlyContinue
