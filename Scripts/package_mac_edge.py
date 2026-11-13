@@ -56,7 +56,7 @@ def main():
     build=(ROOT/'Artifacts/final-mac-build.log').read_text()
     tests=(ROOT/'Artifacts/final-all-tests.log').read_text()
     if '** BUILD SUCCEEDED **' not in build or '** BUILD FAILED **' in build:raise RuntimeError('Release build not passed')
-    summaries=re.findall(r'Executed (\d+) tests, with (\d+) tests skipped and (\d+) failures|Executed (\d+) tests, with (\d+) failures',tests)
+    summaries=re.findall(r'Executed (\d+) tests?, with (\d+) tests? skipped and (\d+) failures|Executed (\d+) tests?, with (\d+) failures',tests)
     if not summaries or any(s in tests for s in ('unexpected signal','Test Suite \'All tests\' failed','error:')):raise RuntimeError('Shared tests not passed')
     last=summaries[-1];executed=int(last[0] or last[3]);skipped=int(last[1] or 0);failures=int(last[2] or last[4])
     if executed<89 or failures:raise RuntimeError('Incomplete shared test suite')
@@ -80,7 +80,9 @@ def main():
         evidence += [p for p in (ROOT/'Artifacts'/folder).rglob('*') if p.is_file() and p.suffix.lower() in ('.json','.png','.jpg','.jpeg','.txt','.log')]
     with zipfile.ZipFile(stage/'LumaStudio-validation.zip','w',zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(set(evidence)):
-            if path.is_file():archive.write(path,'Artifacts/'+path.relative_to(ROOT/'Artifacts').as_posix())
+            if path.is_file():
+                if path.suffix.lower() in ('.json','.txt','.log') and re.search(rb'(?:sk-[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9]{20,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)',path.read_bytes()):raise RuntimeError('Potential credential in validation artifact: '+str(path))
+                archive.write(path,'Artifacts/'+path.relative_to(ROOT/'Artifacts').as_posix())
     manual=(ROOT/'Documentation/RELEASE_0.4.2.md').read_text()
     (stage/'使用说明.md').write_text(manual)
     manifest={'version':version,'build':info['CFBundleVersion'],'platform':'macOS 14+, Apple Silicon arm64','signature':'local ad-hoc; no Developer ID notarization','executable_sha256':sha(app/'Contents/MacOS/LumaStudioMac'),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'ui_acceptance':acceptance,'shared_tests':{'executed':executed,'failures':failures,'skipped_in_full_run':skipped,'supplemental_legacy_fixture_passed':bool(skipped)},'voice_stdio_tests':3,'training_pipeline_regression_tests':6,'trained_product_models':0,'archives':{p.name:{'bytes':p.stat().st_size,'sha256':sha(p)} for p in sorted(stage.glob('*.zip'))}}
