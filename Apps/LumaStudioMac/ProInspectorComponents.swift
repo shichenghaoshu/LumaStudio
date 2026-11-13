@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct ProInspectorGroup<Content: View>: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let title: String,ids: [String]
     @Binding var expanded: Bool
     let reset: ()->Void
@@ -24,7 +24,7 @@ struct ProInspectorGroup<Content: View>: View {
 }
 
 struct ProHistogramPanel: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @State private var data=ImageHistogram()
     var body: some View {
         VStack(spacing:10) {

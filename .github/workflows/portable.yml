@@ -1,0 +1,87 @@
+name: Android and Windows Release
+on:
+  push:
+    branches: [main, 'opencat/**']
+    paths:
+      - 'Apps/LumaStudioCross/**'
+      - '.github/workflows/portable.yml'
+      - 'Scripts/package_windows.ps1'
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  FLUTTER_REVISION: ab2912035e160d9cad6306df307576da6128ebdb
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Flutter
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$env:RUNNER_TEMP/flutter"
+          if ((git -C "$env:RUNNER_TEMP/flutter" rev-parse HEAD) -ne $env:FLUTTER_REVISION) { throw 'Flutter revision mismatch' }
+          "$env:RUNNER_TEMP/flutter/bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          & "$env:RUNNER_TEMP/flutter/bin/flutter.bat" config --no-analytics
+      - name: Native Release build and pixel checks
+        run: |
+          cmake -S Apps/LumaStudioCross/packages/luma_native/src -B native-build -DLUMA_BUILD_TESTS=ON
+          cmake --build native-build --config Release --parallel 4
+          ctest --test-dir native-build -C Release --output-on-failure
+          "LUMA_NATIVE_LIBRARY=$env:GITHUB_WORKSPACE/native-build/Release/luma_native.dll" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Analyze and run workflow and layout tests
+        working-directory: Apps/LumaStudioCross
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-pub
+          flutter test --no-pub
+      - name: Build Windows x64 Release
+        working-directory: Apps/LumaStudioCross
+        run: flutter build windows --release
+      - name: Run the compiled Windows application self-test
+        run: |
+          $exe = "$env:GITHUB_WORKSPACE/Apps/LumaStudioCross/build/windows/x64/runner/Release/lumastudio.exe"
+          $fixture = "$env:RUNNER_TEMP/luma-release-test"
+          $report = "$env:GITHUB_WORKSPACE/Artifacts/windows-release-self-test.json"
+          $process = Start-Process -FilePath $exe -ArgumentList @('--self-test', $fixture, $report) -PassThru -Wait
+          if (Test-Path $report) { Get-Content $report }
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw "Release execution failed: $($process.ExitCode)" }
+          if (!(Get-Content $report -Raw | ConvertFrom-Json).success) { throw 'Release workflow checks failed' }
+      - name: Package Windows with required runtime files
+        run: ./Scripts/package_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LumaStudio-Windows-x64-Release
+          path: |
+            Deliverables/Release-0.5.0/LumaStudio-0.5.0-Windows-x64.zip
+            Artifacts/windows-release-self-test.json
+            Artifacts/Performance/portable-local-self-test.json
+          if-no-files-found: error
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned official Flutter
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = "$FLUTTER_REVISION"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+      - name: Resolve and build optimized Android APK
+        working-directory: Apps/LumaStudioCross
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build apk --release --target-platform android-arm64,android-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LumaStudio-Android-unsigned
+          path: Apps/LumaStudioCross/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error

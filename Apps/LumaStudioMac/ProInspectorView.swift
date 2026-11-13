@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct ProInspectorView: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let section: ParameterSection?
     @State private var query=""
     @State private var hue: HueBand = .red
@@ -231,7 +231,7 @@ struct ProInspectorView: View {
 }
 
 struct ProParameterRow: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let parameter: ParameterDescriptor
     var local=false
     private var available: Bool {
@@ -248,7 +248,7 @@ struct ProParameterRow: View {
 }
 
 struct ProScalarRow: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let id: String,title: String
     @Binding var value: Float
     let range: ClosedRange<Float>,step: Float,scale: Float,offset: Float,unit: String
@@ -274,7 +274,7 @@ struct ProScalarRow: View {
 }
 
 private struct ProCurveEditor: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @State private var channel="master"
     @State private var selected=0
     @State private var dragging: Int?
@@ -318,7 +318,7 @@ private struct ProCurveEditor: View {
 }
 
 private struct ProColorWheel: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let zone: String,title: String
     private var hue: Float {ParameterCatalog.find("color.grading."+zone+"Hue")!.read(model.recipe.document)}
     private var saturation: Float {ParameterCatalog.find("color.grading."+zone+"Saturation")!.read(model.recipe.document)}

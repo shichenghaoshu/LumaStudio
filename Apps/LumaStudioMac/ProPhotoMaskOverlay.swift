@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct ProPhotoMaskOverlay: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let size: CGSize
     let paintingAllowed: Bool
     @State private var points=[BrushPoint]()

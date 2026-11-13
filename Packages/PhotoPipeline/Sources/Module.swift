@@ -122,6 +122,7 @@ public actor PhotoProcessor {
         beauty=try BeautyProcessor(modelURL:modelURL); color=try ColorProcessor();previewCache.countLimit=2;previewCache.totalCostLimit=40*1024*1024
     }
     private func prepared(url: URL,recipe: Recipe,tier: RenderTier,profile: ColorProfile?,raw: RAWSettings,maskPreviewID: String?=nil) throws -> (CIImage,CIImage,SkinAnalysis?,CIImage?) {
+        try Task.checkCancellation()
         let r=try recipe.validated()
         if let edit=r.edit { try ToolRegistry().validate(edit) }
         if r.color.referenceProfileID != nil && profile?.id != r.color.referenceProfileID { throw LumaError.unsupported("配方引用的色彩档案未找到，请先导入对应档案。") }
@@ -139,11 +140,13 @@ public actor PhotoProcessor {
                 previewCache.setObject(original,forKey:key as NSString,cost:cg.width*cg.height*4)
             } else { original=decoded }
         }
+        try Task.checkCancellation()
         let analysis: SkinAnalysis?
         if r.beauty.enabled || profile != nil || r.edit?.evaluation.preserveSkin==true || r.edit?.masks.contains(where:{$0.kind == .skin})==true {
             if tier == .preview,let cached=skinCache,cached.0==key { analysis=cached.1 }
             else { let result=try beauty.segmentation.analyze(original,context:context);analysis=result;if tier == .preview { skinCache=(key,result) } }
         } else { analysis=nil }
+        try Task.checkCancellation()
         var image=original
         var selectedMask: CIImage?
         if let edit=r.edit { image=RecipeAdjustments.global(image,edit.global) }
@@ -182,8 +185,12 @@ public actor PhotoProcessor {
         return (original,image,analysis,selectedMask)
     }
     public func render(url: URL,recipe: Recipe,tier: RenderTier = .preview,profile: ColorProfile? = nil,raw: RAWSettings? = nil,maskPreviewID: String?=nil) throws -> RenderResult {
+        try Task.checkCancellation()
         let start=Date(); let (original,image,analysis,localMask)=try prepared(url:url,recipe:recipe,tier:tier,profile:profile,raw:raw ?? recipe.raw,maskPreviewID:maskPreviewID)
-        guard let cg=context.createCGImage(image,from:image.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!),let source=context.createCGImage(original,from:original.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) else { throw LumaError.invalidImage("渲染") }
+        try Task.checkCancellation()
+        guard let cg=context.createCGImage(image,from:image.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) else {throw LumaError.invalidImage("渲染")}
+        try Task.checkCancellation()
+        guard let source=context.createCGImage(original,from:original.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) else {throw LumaError.invalidImage("原图对照")}
         let mask: CGImage?
         if tier == .preview,let analysis,analysis.faceCount>0 { var framing=recipe.document.geometry;framing.chromaticAberration=0;framing.lensVignette=0
             let ci=ProOperators.geometry(analysis.mask,framing)

@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct PhotoReviewActions: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let ids: Set<UUID>
     var body: some View {
         Section("星标") {
@@ -20,7 +20,7 @@ struct PhotoReviewActions: View {
 }
 
 struct PhotoReviewMenu: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let ids: Set<UUID>
     var title="标记"
     var body: some View {
@@ -44,7 +44,7 @@ struct PhotoReviewBadge: View {
 }
 
 struct PhotoFilterMenu: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         Menu {
             Toggle("仅 RAW",isOn:$model.photoFilter.rawOnly)
@@ -62,7 +62,7 @@ struct PhotoFilterMenu: View {
 }
 
 struct PhotoWorkflowToolbar: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         VStack(alignment:.leading,spacing:8) {
             HStack(spacing:14) {
@@ -82,7 +82,7 @@ struct PhotoWorkflowToolbar: View {
 }
 
 struct RecipeSyncSheet: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let source: PhotoAsset?
     let sourceRecipe: Recipe

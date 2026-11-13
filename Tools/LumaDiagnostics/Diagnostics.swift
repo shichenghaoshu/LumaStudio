@@ -15,6 +15,7 @@ import Darwin
             switch a[0] {
             case "inspect":try await inspect(source,out)
             case "benchmark":try await benchmark(source,out,count:a.count>3 ? Int(a[3]) ?? 100 : 100)
+            case "preview-benchmark":try await previewBenchmark(source,out)
             case "import":let library=try PhotoLibrary(root:out);let result=try await library.importPhoto(source);print("Imported \(result.asset.name), RAW=\(result.asset.isRAW), duplicate=\(result.duplicate)")
             default:throw LumaError.unsupported("Unknown command")
             }
@@ -23,6 +24,32 @@ import Darwin
     static func save(_ cg: CGImage,_ url: URL) throws {
         guard let d=CGImageDestinationCreateWithURL(url as CFURL,"public.png" as CFString,1,nil) else { throw LumaError.invalidImage("PNG destination") };CGImageDestinationAddImage(d,cg,nil)
         guard CGImageDestinationFinalize(d) else { throw LumaError.invalidImage("PNG write") }
+    }
+    /// Reproducible preview workload: the same HSL/curves while exposure changes.
+    /// This measures the image engine, independently of UI automation overhead.
+    static func previewBenchmark(_ source: URL,_ out: URL) async throws {
+        let processor=try PhotoProcessor(),hash=try ContentDigest.sha256(source)
+        var reports=[[String:Any]]()
+        for advanced in [false,true] {
+            var r=Recipe();r.beauty.enabled=false
+            if advanced {
+                r.document.color.hsl=[HSLAdjustment(band:.orange,saturation:0.2,luminance:0.1),HSLAdjustment(band:.blue,hue:0.02,saturation:0.15)]
+                r.document.color.curve.master=[CurvePoint(0,0),CurvePoint(0.3,0.26),CurvePoint(0.7,0.76),CurvePoint(1,1)]
+            }
+            var samples=[Double]()
+            for i in 0..<25 {
+                r.document.global.exposure=Float(i%9)*0.04
+                let result=try await processor.render(url:source,recipe:r)
+                samples.append(result.milliseconds)
+                if i==24 {try save(result.image,out.appendingPathComponent(advanced ? "advanced.png" : "tone.png"))}
+            }
+            let warm=Array(samples.dropFirst()).sorted()
+            reports.append(["workload":advanced ? "tone_with_hsl_curve" : "tone","cold_ms":samples[0],"warm_median_ms":warm[warm.count/2],"warm_p95_ms":warm[Int(Double(warm.count-1)*0.95)],"samples_ms":samples])
+        }
+        guard try ContentDigest.sha256(source)==hash else {throw LumaError.corruptData("Original changed")}
+        let report:[String:Any] = ["input":source.lastPathComponent,"sha256":hash,"device":MTLCreateSystemDefaultDevice()?.name ?? "software","build":"Release","scope":"engine preview; not end-to-end UI latency","workloads":reports]
+        try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:out.appendingPathComponent("report.json"))
+        print("PREVIEW BENCHMARK SUCCESS")
     }
     static func inspect(_ source: URL,_ out: URL) async throws {
         let processor=try PhotoProcessor();var recipe=Recipe();recipe.beauty.enabled=true

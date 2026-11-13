@@ -1,0 +1,17 @@
+name: luma_native
+description: Native sRGB photo processing and LibRaw 0.22.3 decoding.
+version: 0.5.0
+publish_to: none
+environment:
+  sdk: ^3.14.0
+dependencies:
+  ffi: ^2.1.4
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

@@ -10,7 +10,7 @@ private enum WorkspaceTheme {
 }
 
 struct MacWorkspaceRail: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         VStack(spacing:8) {
             VStack(spacing:7) {
@@ -54,7 +54,7 @@ private enum WorkspaceInspectorTab: String,CaseIterable {
 }
 
 struct MacEditWorkspace: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @State private var tab: WorkspaceInspectorTab = .color
     @State private var assistantOpen=false
     @State private var fineEditing=true
@@ -332,7 +332,7 @@ private actor StylePreviewRenderer {
 }
 
 private struct MacPhotoStage: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let zoom: CGFloat
     let comparing: Bool
     @Binding var comparisonPosition: CGFloat
@@ -377,7 +377,7 @@ private struct MacPhotoStage: View {
 }
 
 private struct MacWorkspaceFilmstrip: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     private var photos: [PhotoAsset] {model.visibleAssets}
     var body: some View {
         VStack(spacing:0) {

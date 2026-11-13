@@ -21,7 +21,7 @@ private extension AgentStage {
 private enum ProcessPreviewMode: String,CaseIterable { case result="效果",original="原图",comparison="对照" }
 
 struct AgentProcessWorkspace: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedStage: AgentStage?
     @State private var focusedRound: Int?

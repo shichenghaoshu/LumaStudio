@@ -14,12 +14,17 @@ def git(*args, **kwargs):
     return subprocess.run(["git", *args], cwd=ROOT, check=True, **kwargs)
 
 def audit():
-    paths = []
-    for name in ALLOWED:
-        start = ROOT / name
-        if not start.exists():
-            continue
-        paths.extend(start.rglob("*") if start.is_dir() else [start])
+    # Respect each platform's generated build/cache exclusions. Walking Apps
+    # recursively would include SDK symlinks and compiled Flutter engines.
+    if (ROOT / ".git").exists():
+        names = git("ls-files", "-c", "-o", "--exclude-standard", "-z", "--", *ALLOWED, capture_output=True).stdout.decode().split("\0")
+        paths = [ROOT / name for name in set(filter(None, names))]
+    else:
+        paths = []
+        for name in ALLOWED:
+            start = ROOT / name
+            if start.exists():
+                paths.extend(start.rglob("*") if start.is_dir() else [start])
     count = size = 0
     for path in paths:
         relative = path.relative_to(ROOT).as_posix()

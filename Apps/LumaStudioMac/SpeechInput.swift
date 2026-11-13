@@ -53,7 +53,7 @@ import PhotoCore
 }
 
 struct MacVoiceInputButton: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @StateObject private var speech=SpeechInputController()
     @State private var statusPresented=false
     var body: some View {

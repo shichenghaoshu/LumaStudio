@@ -5,6 +5,16 @@ import ColorEngine
 
 /// Global controls run on Core Image; HSL/curves/grading are compiled to one bounded 25³ LUT.
 enum RecipeAdjustments {
+    private final class CompiledColor: NSObject {
+        let lut: LUT3D
+        init(_ lut: LUT3D) {self.lut=lut}
+    }
+    // NSCache is thread-safe; preview and batch actors may compile concurrently.
+    // Tone/exposure edits leave this color transform unchanged.
+    private static let compiledColors: NSCache<NSString,CompiledColor> = {
+        let cache=NSCache<NSString,CompiledColor>()
+        cache.countLimit=12;cache.totalCostLimit=4*1024*1024;return cache
+    }()
     static func global(_ image: CIImage,_ g: GlobalAdjustments) -> CIImage {
         var r=image.applyingFilter("CIExposureAdjust",parameters:[kCIInputEVKey:g.exposure])
             .applyingFilter("CIColorControls",parameters:[kCIInputContrastKey:g.contrast,kCIInputSaturationKey:g.saturation,kCIInputBrightnessKey:g.brightness])
@@ -35,6 +45,11 @@ enum RecipeAdjustments {
         var neutralSelective=SelectiveColorSettings();neutralSelective.absolute=color.selective.absolute
         let hasSelective=color.selective != neutralSelective
         guard color.hsl.contains(where:{$0.hue != 0 || $0.saturation != 0 || $0.luminance != 0}) || ![curves.master,curves.red,curves.green,curves.blue].allSatisfy(\.isEmpty) || hasGrade || hasLevels || hasCalibration || hasRange || hasSelective else { return image }
+        var transform=color;transform.lut=nil;transform.intensity=1;transform.referenceProfileID=nil
+        let encoder=JSONEncoder();encoder.outputFormatting = .sortedKeys
+        let cacheKey=try encoder.encode(transform).base64EncodedString() as NSString
+        if let cached=compiledColors.object(forKey:cacheKey) {return cached.lut.apply(to:image).cropped(to:image.extent)}
+        try Task.checkCancellation()
         func interpolate(_ x: Double,_ p: [CurvePoint])->Double {
             Double(CurveSampler.value(Float(x),points:p))
         }
@@ -71,6 +86,7 @@ enum RecipeAdjustments {
             let sc=rgb(Double(grade.shadowHue)/360,1,1),hc=rgb(Double(grade.highlightHue)/360,1,1),mc=rgb(Double(grade.midtoneHue)/360,1,1)
             return RGB(min(1,max(0,c.r+(sc.r-0.5)*shadow+(mc.r-0.5)*middle+(hc.r-0.5)*highlight+lum)),min(1,max(0,c.g+(sc.g-0.5)*shadow+(mc.g-0.5)*middle+(hc.g-0.5)*highlight+lum)),min(1,max(0,c.b+(sc.b-0.5)*shadow+(mc.b-0.5)*middle+(hc.b-0.5)*highlight+lum)))
         }
+        compiledColors.setObject(CompiledColor(lut),forKey:cacheKey,cost:lut.values.count*MemoryLayout<Float>.size)
         return lut.apply(to:image).cropped(to:image.extent)
     }
 }

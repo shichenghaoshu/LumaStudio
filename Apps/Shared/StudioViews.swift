@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 let studioAccent=Color(red:0.98,green:0.84,blue:0.18)
 struct StudioRoot: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         Group {
             #if os(macOS)
@@ -50,11 +50,11 @@ struct StudioHeader<Actions: View>: View {
     var body: some View { HStack(alignment:.center) { VStack(alignment:.leading,spacing:5){Text(title).font(.title2.weight(.semibold));Text(subtitle).font(.caption).foregroundStyle(.secondary)};Spacer();actions }.padding(.horizontal,24).padding(.vertical,18) }
 }
 struct ImportButtons: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View { Menu {Button("导入照片…"){model.choose(.photos)};Button("导入文件夹…"){model.choose(.folder)};Divider();Button("选择图库位置…"){model.choose(.library)}} label:{Label("导入",systemImage:"plus")}.menuStyle(.borderlessButton).fixedSize().disabled(model.importing) }
 }
 struct PhotoCanvas: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         ZStack {
             Color(white:0.045)
@@ -90,11 +90,11 @@ struct PhotoThumbnail: View {
     }
 }
 struct Filmstrip: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View { ScrollView(.horizontal) { LazyHStack(spacing:10) { ForEach(model.assets) { asset in Button{model.select(asset)} label:{PhotoThumbnail(asset:asset,selected:model.selectedID==asset.id).frame(width:118)}.buttonStyle(.plain).accessibilityLabel("编辑 \(asset.name)") } }.padding(.horizontal,16).padding(.vertical,8) }.frame(height:133).background(Color(white:0.08)) }
 }
 struct EditWorkspace: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         VStack(spacing:0) {
             StudioHeader(title:"修图",subtitle:model.selected?.name ?? "LIGHT, COLOR & THE HUMAN TOUCH") {
@@ -120,7 +120,7 @@ struct EditWorkspace: View {
     var statusBar: some View { HStack{Text(model.renderStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2);Spacer();Toggle("原图",isOn:$model.showingOriginal).toggleStyle(.button).font(.caption).disabled(model.original==nil)}.padding(.horizontal,16).padding(.vertical,9).background(Color(white:0.07)) }
 }
 struct EditControls: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var compact=false
     @State private var recipeName="我的人像配方"
     var body: some View {
@@ -188,7 +188,7 @@ struct LabeledSlider: View {
     var body: some View { VStack(spacing:3){HStack{Text(title);Spacer();Text(value,format:.number.precision(.fractionLength(2))).monospacedDigit().foregroundStyle(.secondary)}.font(.caption);Slider(value:$value,in:range).accessibilityLabel(title)} }
 }
 struct BatchWorkspace: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View { VStack(spacing:0) {
         StudioHeader(title:"批量修图",subtitle:"已选 \(model.selection.count) 张 · \(model.batchMode.rawValue)") {
             HStack(spacing:16){ImportButtons(model:model);Button("全选可见"){model.selection=Set(model.visibleAssets.map(\.id))};Button("清空"){model.selection=[]};Menu{Button("处理并导出到本地图库"){model.batchToLibrary()};Button("选择输出文件夹…"){model.choose(.exportBatch)}}label:{Text(model.batchPreparing ? "正在准备…" : "处理并导出")}primaryAction:{model.batchToLibrary()}.fixedSize().buttonStyle(.borderedProminent).disabled(model.selection.isEmpty || model.batchSnapshot?.active==true || model.batchPreparing || model.workflowBusy)}
@@ -261,7 +261,7 @@ struct BatchWorkspace: View {
     }
 }
 struct CaptureWorkspace: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View { VStack(spacing:0) {
         StudioHeader(title:"联机拍摄",subtitle:"多品牌照片 · 文件夹监听 / 系统 USB 导入") {Button{model.syncPresented=true}label:{Label("Mac ↔ iPad",systemImage:"wifi")}}
         Divider()
@@ -275,7 +275,7 @@ struct CaptureWorkspace: View {
 }
 #if os(macOS)
 struct MacCapturePanel: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @ObservedObject var tether: LumixTetherFolderAdapter
     @ObservedObject var native: NativeCameraAdapter
     @State private var nativeEnabled=false
@@ -310,7 +310,7 @@ struct PadRemoteShutter: View {
     var body: some View {Button("Mac 远程快门"){Task{try? await sync.requestCapture()}}.disabled(!sync.connected || !sync.remoteCaptureAvailable)}
 }
 struct SyncPanel: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @ObservedObject var sync: LocalSyncService
     @Environment(\.dismiss) var dismiss
     

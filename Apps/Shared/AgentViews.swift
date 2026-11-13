@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct AgentComposer: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         VStack(alignment:.leading,spacing:12) {
             HStack {
@@ -39,7 +39,7 @@ struct AgentComposer: View {
     }
 }
 struct AgentPlanView: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     let run: AgentRun
     var body: some View {
         VStack(alignment:.leading,spacing:10) {
@@ -71,7 +71,7 @@ struct AgentPlanView: View {
     private func maskName(_ kind: MaskKind)->String { switch kind {case .face:return "人脸";case .skin:return "皮肤";case .subject:return "人物";case .background:return "背景";case .hair:return "头发";case .sky:return "天空";case .brush:return "画笔"} }
 }
 struct AgentAdvancedControls: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     var body: some View {
         if model.recipe.edit != nil {
             DisclosureGroup("影调与局部调整") {
@@ -100,7 +100,7 @@ struct AgentAdvancedControls: View {
     }
 }
 struct LocalModelsPanel: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(alignment:.leading,spacing:18) {

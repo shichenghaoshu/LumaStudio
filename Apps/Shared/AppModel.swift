@@ -1,134 +1,136 @@
 import SwiftUI
+import Observation
 import UniformTypeIdentifiers
 import PhotoCore
 
-@MainActor final class AppModel: ObservableObject {
+@MainActor @Observable final class AppModel {
     enum Page: String,CaseIterable,Identifiable { case capture="拍摄",edit="修图",batch="批量";var id: Self { self };var symbol: String { switch self {case .capture:return "camera";case .edit:return "slider.horizontal.3";case .batch:return "square.grid.2x2"} } }
     enum ImportIntent { case photos,folder,inbox,library,reference,recipe,profile,lut,exportSingle,exportBatch,modelPackage }
-    @Published var page: Page = .edit
-    @Published var assets: [PhotoAsset]=[]
-    @Published var selectedID: UUID?
-    @Published var selection=Set<UUID>()
-    @Published var photoReviews=[UUID:PhotoReview]()
-    @Published var photoFilter=PhotoFilter() { didSet { if photoFilter != oldValue { pruneHiddenSelection() } } }
-    @Published var reviewBusy=false
-    @Published var recipeSyncPresented=false
-    @Published var workflowBusy=false
-    @Published var lastRecipeSync: RecipeSyncTransaction?
-    @Published var workflowStatus=""
-    @Published var recipe=Recipe() { didSet {
+    var page: Page = .edit
+    var assets: [PhotoAsset]=[]
+    var selectedID: UUID?
+    var selection=Set<UUID>()
+    var photoReviews=[UUID:PhotoReview]()
+    var photoFilter=PhotoFilter() { didSet { if photoFilter != oldValue { pruneHiddenSelection() } } }
+    var reviewBusy=false
+    var recipeSyncPresented=false
+    var workflowBusy=false
+    var lastRecipeSync: RecipeSyncTransaction?
+    var workflowStatus=""
+    var recipe=Recipe() { didSet {
         if recipe != oldValue {
             if !restoring,parameterGestureBase==nil {pushUndo(oldValue)}
             schedulePreview()
         }
     } }
-    @Published var rawCapabilities=RAWCapabilities.unavailable
-    @Published var faceCount=0
-    @Published var activeMaskID: String? {didSet{if activeMaskID != oldValue {schedulePreview()}}}
-    @Published var showMaskOverlay=false {didSet{schedulePreview()}}
-    @Published var maskPreview: CGImage?
-    @Published var drawingBrush=false
-    @Published var previewBypassedParameters: [String]=[] {didSet{if previewBypassedParameters != oldValue {schedulePreview()}}}
-    @Published var agentParameterChanges: [ParameterChange]=[]
-    private var parameterGestureBase: Recipe?
-    private var agentStartingRecipe: EditRecipe?
-    @Published var instruction=""
-    @Published var agentBusy=false
-    @Published var agentStatus="用一句话描述你想要的效果"
-    @Published var agentRun: AgentRun?
+    var rawCapabilities=RAWCapabilities.unavailable
+    var faceCount=0
+    var activeMaskID: String? {didSet{if activeMaskID != oldValue {schedulePreview()}}}
+    var showMaskOverlay=false {didSet{schedulePreview()}}
+    var maskPreview: CGImage?
+    var drawingBrush=false
+    var previewBypassedParameters: [String]=[] {didSet{if previewBypassedParameters != oldValue {schedulePreview()}}}
+    var agentParameterChanges: [ParameterChange]=[]
+    @ObservationIgnored private var parameterGestureBase: Recipe?
+    @ObservationIgnored private var agentStartingRecipe: EditRecipe?
+    var instruction=""
+    var agentBusy=false
+    var agentStatus="用一句话描述你想要的效果"
+    var agentRun: AgentRun?
     enum AgentProcessState { case idle,running,completed,cancelled,failed }
-    @Published var agentProcessPresented=false
-    @Published var agentProcessState: AgentProcessState = .idle
-    @Published var agentEvents: [AgentEvent]=[]
-    @Published var agentAnalysis: ImageAnalysis?
-    @Published var agentPlan: AgentPlan?
-    @Published var agentRounds: [AgentRound]=[]
-    @Published var agentDirectory: URL?
-    @Published var agentStartedAt: Date?
-    @Published var agentEndedAt: Date?
-    @Published var agentInstruction=""
-    @Published var agentFailure: String?
-    @Published var automaticCorrection=true
-    @Published var useLocalModel=true
-    @Published var modelManagerPresented=false
-    @Published var integrationsPresented=false
-    @Published var cloudSettings: CloudSettings = (UserDefaults.standard.data(forKey:"cloudSettings.v1").flatMap{try? JSONDecoder().decode(CloudSettings.self,from:$0)}) ?? CloudSettings() {
+    var agentProcessPresented=false
+    var agentProcessState: AgentProcessState = .idle
+    var agentEvents: [AgentEvent]=[]
+    var agentAnalysis: ImageAnalysis?
+    var agentPlan: AgentPlan?
+    var agentRounds: [AgentRound]=[]
+    var agentDirectory: URL?
+    var agentStartedAt: Date?
+    var agentEndedAt: Date?
+    var agentInstruction=""
+    var agentFailure: String?
+    var automaticCorrection=true
+    var useLocalModel=true
+    var modelManagerPresented=false
+    var integrationsPresented=false
+    var cloudSettings: CloudSettings = (UserDefaults.standard.data(forKey:"cloudSettings.v1").flatMap{try? JSONDecoder().decode(CloudSettings.self,from:$0)}) ?? CloudSettings() {
         didSet { if let data=try? JSONEncoder().encode(cloudSettings) { UserDefaults.standard.set(data,forKey:"cloudSettings.v1") };cloudConnectionStatus="配置已更改，尚未测试" }
     }
-    @Published var cloudConnectionStatus="尚未测试在线服务"
-    @Published var cloudTesting=false
-    @Published var cloudKeySaved=false
-    @Published var cloudSessionKeyAvailable=false
-    private var sessionCloudKey: (account:String,value:String)?
-    @Published var voiceInbox: [VoiceCommand]=[]
-    @Published var automaticVoiceExecution=false
-    @Published var allowAppleOnlineSpeech=false
-    @Published var localVoicePort: UInt16?
-    @Published var localVoiceStarting=false
-    @Published var localVoiceStatus="本机语音接口未启动"
-    @Published var xiaozhiState: VoiceConnectionState = .disconnected
-    @Published var xiaozhiEndpointSaved=false
+    var cloudConnectionStatus="尚未测试在线服务"
+    var cloudTesting=false
+    var cloudKeySaved=false
+    var cloudSessionKeyAvailable=false
+    @ObservationIgnored private var sessionCloudKey: (account:String,value:String)?
+    var voiceInbox: [VoiceCommand]=[]
+    var automaticVoiceExecution=false
+    var allowAppleOnlineSpeech=false
+    var localVoicePort: UInt16?
+    var localVoiceStarting=false
+    var localVoiceStatus="本机语音接口未启动"
+    var xiaozhiState: VoiceConnectionState = .disconnected
+    var xiaozhiEndpointSaved=false
     private let voiceQueue=VoiceCommandQueue()
     private let localVoiceServer=LocalVoiceServer()
     private let xiaozhiClient=XiaozhiMCPClient()
-    private var localVoiceToken=""
-    private var voiceConnectionGeneration=UUID()
-    @Published var installedModels: [InstalledModel]=[]
-    @Published var modelsBusy=false
-    @Published var preferenceCount=0
-    @Published var canUndo=false
-    @Published var canRedo=false
+    @ObservationIgnored private var localVoiceToken=""
+    @ObservationIgnored private var voiceConnectionGeneration=UUID()
+    var installedModels: [InstalledModel]=[]
+    var modelsBusy=false
+    var preferenceCount=0
+    var canUndo=false
+    var canRedo=false
     let deviceManager=DeviceCapabilityManager()
-    @Published var preview: CGImage?
-    @Published var original: CGImage?
-    @Published var showingOriginal=false
-    @Published var rendering=false
-    @Published var importing=false
-    @Published var importProgress=""
-    @Published var renderStatus="导入照片，开始本地修图"
-    @Published var message: String?
-    @Published var exportedURL: URL?
-    @Published var batchSnapshot: BatchSnapshot?
+    var preview: CGImage?
+    var original: CGImage?
+    var showingOriginal=false
+    var rendering=false
+    var importing=false
+    var importProgress=""
+    var renderStatus="导入照片，开始本地修图"
+    var message: String?
+    var exportedURL: URL?
+    var batchSnapshot: BatchSnapshot?
     enum BatchMode: String,CaseIterable,Identifiable {
         case uniform="统一当前配方",saved="每张已存设置",ai="逐张 AI 调整"
         var id: Self {self}
     }
-    @Published var batchMode: BatchMode = .uniform
+    var batchMode: BatchMode = .uniform
     var batchAIEnabled: Bool { get {batchMode == .ai} set {batchMode = newValue ? .ai : .uniform} }
-    @Published var batchInstruction="逐张自然校正曝光和白平衡，适度恢复高光和阴影，保持同组色彩协调，保留细节，不要美颜。"
-    @Published var batchPreparing=false
-    @Published var savedRecipes: [URL]=[]
-    @Published var userFilters: [UserFilter]=UserFilterLibrary.all()
-    @Published var profile: ColorProfile?
-    @Published var useCompanionJPEG=false { didSet { schedulePreview() } }
-    @Published var importerPresented=false
-    @Published var syncPresented=false
-    @Published var pairingInput=""
-    @Published var autoBeauty=true
-    @Published var autoSend=false
-    @Published var root: URL
-    @Published var inbox: URL
+    var batchInstruction="逐张自然校正曝光和白平衡，适度恢复高光和阴影，保持同组色彩协调，保留细节，不要美颜。"
+    var batchPreparing=false
+    var savedRecipes: [URL]=[]
+    var userFilters: [UserFilter]=UserFilterLibrary.all()
+    var profile: ColorProfile?
+    var useCompanionJPEG=false { didSet { schedulePreview() } }
+    var importerPresented=false
+    var syncPresented=false
+    var pairingInput=""
+    var autoBeauty=true
+    var autoSend=false
+    var root: URL
+    var inbox: URL
     let sync: LocalSyncService
     let tether: LumixTetherFolderAdapter
     #if os(macOS)
     let native: NativeCameraAdapter
     #endif
-    private var library: PhotoLibrary?
-    private var processor: PhotoProcessor?
-    private var batch: BatchProcessor
-    private var renderTask: Task<Void,Never>?
-    private var renderGeneration=UUID()
-    private var importIntent: ImportIntent = .photos
-    private var bookmarkURLs=[URL]()
-    private var restoring=false
-    private var undoRecipes=[Recipe](),redoRecipes=[Recipe]()
+    @ObservationIgnored private var library: PhotoLibrary?
+    @ObservationIgnored private var processor: PhotoProcessor?
+    @ObservationIgnored private var batch: BatchProcessor
+    @ObservationIgnored private var renderTask: Task<Void,Never>?
+    @ObservationIgnored private var renderGeneration=UUID()
+    @ObservationIgnored private var importIntent: ImportIntent = .photos
+    @ObservationIgnored private var bookmarkURLs=[URL]()
+    @ObservationIgnored private var restoring=false
+    @ObservationIgnored private var undoRecipes=[Recipe]()
+    @ObservationIgnored private var redoRecipes=[Recipe]()
 
-    private var agentTask: Task<Void,Never>?
-    private var agentGeneration=UUID()
-    private var preferenceMemory: LocalPreferenceMemory?
-    private var historyStore: LocalHistoryStore?
-    private var modelManager: ModelManager?
-    private var activeBeautyModelPath: String?
+    @ObservationIgnored private var agentTask: Task<Void,Never>?
+    @ObservationIgnored private var agentGeneration=UUID()
+    @ObservationIgnored private var preferenceMemory: LocalPreferenceMemory?
+    @ObservationIgnored private var historyStore: LocalHistoryStore?
+    @ObservationIgnored private var modelManager: ModelManager?
+    @ObservationIgnored private var activeBeautyModelPath: String?
     var selected: PhotoAsset? { assets.first{$0.id==selectedID} }
     var visibleAssets: [PhotoAsset] { photoFilter.apply(to:assets,reviews:photoReviews) }
     var canSynchronize: Bool { selected != nil && preview != nil && !rendering && !agentBusy && !workflowBusy && !batchPreparing && batchSnapshot?.active != true }
@@ -197,9 +199,17 @@ import PhotoCore
         agentTask?.cancel();agentGeneration=UUID();agentBusy=false;agentRun=nil;agentStatus="用一句话描述你想要的效果"
         resetAgentProcess()
         undoRecipes=[];redoRecipes=[];canUndo=false;canRedo=false
+        restoring=true
         renderTask?.cancel();renderGeneration=UUID();selectedID=asset.id;preview=nil;original=nil;useCompanionJPEG=false
         activeMaskID=nil;maskPreview=nil;showMaskOverlay=false;drawingBrush=false;faceCount=0;previewBypassedParameters=[]
-        rawCapabilities=RAWCapabilities.inspect(asset.originalURL)
+        rawCapabilities = .unavailable
+        restoring=false
+        // Probing a RAW decoder may open a large file or start LibRaw. It must
+        // never block photo selection or layout on the main actor.
+        Task {
+            let capabilities=await Task.detached(priority:.utility){RAWCapabilities.inspect(asset.originalURL)}.value
+            guard selectedID==asset.id else {return};rawCapabilities=capabilities
+        }
         Task {
             let r=(try? await library?.recipe(for:asset.id)) ?? Recipe()
             guard selectedID==asset.id else { return };restoring=true;recipe=r;restoring=false

@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct MacAgentConversation: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @State private var history=[AgentRun]()
     private let steps: [(AgentStage,String)]=[(.analysis,"分析照片"),(.planning,"生成方案"),(.rendering,"执行修图"),(.evaluation,"检查效果"),(.saving,"保存记录")]
     var body: some View {

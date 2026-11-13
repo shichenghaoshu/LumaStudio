@@ -35,3 +35,16 @@ Training/outputs/
 
 Vendor/llama.xcframework/
 Vendor/build-apple/
+
+# Portable clients: generated SDK/build state and local signing material
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/build/
+**/.gradle/
+**/.cxx/
+**/local.properties
+**/flutter/ephemeral/
+**/.symlinks/
+*.jks
+*.keystore
+**/key.properties

@@ -2,7 +2,7 @@ import SwiftUI
 import PhotoCore
 
 struct IntegrationSettingsView: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var section=0
     @State private var apiKey=""
