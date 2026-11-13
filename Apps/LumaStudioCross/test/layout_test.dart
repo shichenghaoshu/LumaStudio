@@ -26,6 +26,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('用示例照片体验'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      final skinTab = find.text('肤色').first;
+      await tester.ensureVisible(skinTab);
+      await tester.pumpAndSettle();
+      expect(skinTab.hitTestable(), findsOneWidget);
+      await tester.tap(skinTab);
+      await tester.pumpAndSettle();
+      expect(find.text('高强度'), findsOneWidget);
+      expect(tester.takeException(), isNull);
       await tester.tap(find.byTooltip('接入与导出设置'));
       await tester.pumpAndSettle();
       expect(find.text('API 密钥 · 仅本次会话'), findsOneWidget);

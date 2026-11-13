@@ -39,6 +39,17 @@ void main() {
         fail('Preview did not settle');
       }
 
+      Future<void> tapText(String text) async {
+        final target = find.text(text).first;
+        await tester.ensureVisible(target);
+        // Horizontal inspector tabs may move outside the original hit-test
+        // position. Wait for the scroll layout before delivering a real tap.
+        await tester.pumpAndSettle();
+        expect(target.hitTestable(), findsOneWidget);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
       await ready();
       final before = s.recipe.values[0];
       await tester.drag(find.byType(Slider).first, const Offset(60, 0));
@@ -47,11 +58,8 @@ void main() {
       await tester.tap(find.byTooltip('撤销编辑'));
       await ready();
       expect(s.recipe.values[0], before);
-      await tester.ensureVisible(find.text('肤色').first);
-      await tester.tap(find.text('肤色').first);
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('高强度'));
-      await tester.tap(find.text('高强度'));
+      await tapText('肤色');
+      await tapText('高强度');
       await ready();
       expect(s.recipe.values[16], 1);
       expect(s.recipe.values[18], 0);
@@ -59,17 +67,12 @@ void main() {
       await tester.tap(find.byTooltip('撤销编辑'));
       await ready();
       expect(s.recipe.values[16], 0);
-      await tester.ensureVisible(find.text('滤镜').first);
-      await tester.tap(find.text('滤镜').first);
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('暖调'));
-      await tester.tap(find.text('暖调'));
+      await tapText('滤镜');
+      await tapText('暖调');
       await ready();
       expect(s.recipe.filter, 'warm');
-      await tester.ensureVisible(find.text('裁切').first);
-      await tester.tap(find.text('裁切').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('1:1'));
+      await tapText('裁切');
+      await tapText('1:1');
       await ready();
       expect(s.preview.value!.width, s.preview.value!.height);
       final output = await s.exportPhoto(
