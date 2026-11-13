@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--device', required=True)
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--java', type=Path, required=True)
+    parser.add_argument('--flutter',type=Path,default=Path(shutil.which('flutter') or ROOT/'work/sdk/flutter/bin/flutter'))
     args = parser.parse_args()
     adb = shutil.which('adb') or str(args.sdk/'platform-tools/adb')
     device = [adb, '-s', args.device]
@@ -28,6 +29,11 @@ def main():
     app = ROOT/'Apps/LumaStudioCross'
     env = dict(os.environ, JAVA_HOME=str(args.java), ANDROID_HOME=str(args.sdk))
     with (evidence/'android-release-test-build.log').open('w') as log:
+        # Flutter tests generate a plugin registrant with dev-only integration
+        # plugins. Regenerate the production entry before invoking Gradle directly.
+        subprocess.run([str(args.flutter),'build','apk','--release','--target-platform',
+                        'android-arm64,android-x64'],cwd=app,env=env,
+                       stdout=log,stderr=subprocess.STDOUT,check=True)
         subprocess.run(['./gradlew',':app:assembleRelease',':app:assembleReleaseAndroidTest',
                         '-Ptarget-platform=android-arm64,android-x64'],cwd=app/'android',env=env,
                        stdout=log,stderr=subprocess.STDOUT,check=True)
