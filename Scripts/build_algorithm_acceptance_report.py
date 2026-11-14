@@ -38,6 +38,7 @@ def display_rule(rule):
         'adding subtractive ink lowers its complementary RGB channel':'增加CMYK墨色后，对应互补RGB通道降低',
         'denoising reduces error against the known clean image':'降噪使结果更接近已知干净图像',
         'large-scale step contrast is retained':'保留大尺度阶跃边缘对比',
+        'matching perspective correction makes known converging lines parallel':'正确方向的透视校正使已知汇聚线恢复平行',
         'chroma noise moves closer to neutral':'色彩噪声向已知中性真值收敛',
         'more detail retention preserves more high-frequency signal':'细节保留增大后，保留更多高频信号',
         'sharpening increases edge slope':'锐化使已知边缘的斜率增大',
@@ -124,6 +125,9 @@ def main():
     live = read(evidence / 'LiveDeepSeek/batch-report.json')
     if live['failed'] or live['completed'] != 1 or any(x['fallbackReason']!='none' or not x['source'].startswith('在线') for x in live['files']):
         raise ValueError('Real service success must not be inferred from a local fallback')
+    rule_batch=read(evidence / 'LiveRules/batch-report.json')
+    if rule_batch['count']!=5 or rule_batch['completed']!=5 or rule_batch['failed']:
+        raise ValueError('Actual rule batch is incomplete')
     ui_file = evidence / 'mac-final-ui.json'
     ui = read(ui_file) if ui_file.exists() else {'status': 'pending', 'checks': {}}
     workflows = [
@@ -134,7 +138,7 @@ def main():
         ('曲线／HSL／分级／参考图统计匹配','AlgorithmEffectTests','方向／通道／距离检查通过','colorPanels'),
         ('人脸皮肤／人物背景／画笔蒙版','ImageTests.ImageTests','区域与背景保护检查通过','localMask'),
         ('裁剪、旋转、畸变、色差及8方向','ExportContractTests','像素区域与导出方向通过','crop'),
-        ('固定配方／逐张方案／恢复／重试批量','BatchTests.BatchTests','真实9图RAW批量和队列检查通过','batchExport'),
+        ('固定配方／逐张方案／恢复／重试批量','BatchTests.BatchTests','真实9图RAW批量、5图规则AI批量和队列检查通过','batchExport'),
         ('本地规则、Qwen真实推理、评估纠偏','AgentTests.AgentTests','真实本地推理与约束检查通过','localAgent'),
         ('模型包安装、哈希、升级及回滚','ModelTests.ModelTests','本地模型包检查通过',''),
         ('DeepSeek在线规划并渲染导出','LiveDeepSeek/batch-report.json','真实服务通过，无本地回退','onlineAgent'),
@@ -156,6 +160,7 @@ def main():
               'uniquePassedSwiftTests':len(passed_tests),'passedTests':passed_tests,
               'rawCameras':len(raw['files']),'rawFormats':len({Path(x['input']).suffix.lower() for x in raw['files']}),'portraitPhotos':5,'beautyPresets':5,'filterPresets':30,
               'exportCombinations':30,'orientations':8,'workflows':workflow_rows,'gui':ui,
+              'realRuleBatch':{'count':5,'completed':5,'failed':0,'source':'Offline rules + Vision','seconds':rule_batch['elapsedSeconds']},
               'realDeepSeek':{'completed':live['completed'],'failed':live['failed'], 'seconds':live['elapsedSeconds'],
                              'scope':'One text/statistics-only request, exact +0.3EV, no beauty, no fallback; real local export'},
               'limitations':['Known fixtures do not prove all scenes or aesthetic preference.',
@@ -189,9 +194,9 @@ def main():
 <h2>工作流及外部依赖</h2><div class="table-wrap"><table><thead><tr><th>功能</th><th>实际状态</th><th>可展开的执行依据</th></tr></thead><tbody>__WORKFLOWS__</tbody></table></div>
 <h2>真实人像输出</h2><p>5张独立公开NASA照片，含一张7人合影，分别运行全部5个美颜预设。零蒙版背景保护检查通过。下图是实际GPU输出，强效模式有明显蜡感和局部边界，未做广泛主观审美验收；照片仅作本地算法核查，不表示人物代言。</p><details class="gallery"><summary>查看原图、自然、强效、塑形对照</summary>__PHOTOS__</details>
 <h2>格式与导出边界</h2><p>9台相机／9类RAW：RW2、CR2、CR3、NEF、ARW、RAF、ORF、DNG、PEF（含松下G9）。全部实际原尺寸JPEG批量导出并重新解码，源文件哈希不变。富士X-T2 RAF使用LibRaw备用显影，仅RAW曝光可调，其余RAW项按能力禁用。所有相机变体并未穷尽。</p><p>30种导出组合覆盖JPEG／PNG／TIFF、sRGB／Display P3／Adobe RGB、8／16位及EXIF保留开关。JPEG实际为8位。8个EXIF方向以四角色块独立核对，预览、原尺寸和导出方向一致。RAW锐度在G9原尺寸结果生效，在1600px预览无变化，界面已有说明。</p>
-<div class="foot"><p><a href="acceptance-inventory.json">完整结构化清单</a> · <a href="all-tests.log">本地完整检查日志</a> · <a href="all-tests-release.log">Release检查日志</a> · <a href="LiveDeepSeek/batch-report.json">真实DeepSeek执行记录</a></p><p>数据来源：<a href="https://www.nasa.gov/nasa-brand-center/images-and-media/">NASA媒体规范</a>、<a href="https://raw.pixls.us/">raw.pixls.us公开RAW样本</a>。这是实测范围内的验收记录。真人语音、小智官方设备、真实相机控制、跨设备传输、专业模型训练和Windows／Android本轮真实设备验收仍单列。</p></div></main>
+<div class="foot"><p><a href="acceptance-inventory.json">完整结构化清单</a> · <a href="all-tests.log">本地完整检查日志</a> · <a href="all-tests-release.log">Release检查日志</a> · <a href="LiveDeepSeek/batch-report.json">真实DeepSeek执行记录</a> · <a href="LiveRules/batch-report.json">5图本地规则AI批量</a></p><p>数据来源：<a href="https://www.nasa.gov/nasa-brand-center/images-and-media/">NASA媒体规范</a>、<a href="https://raw.pixls.us/">raw.pixls.us公开RAW样本</a>。这是实测范围内的验收记录。真人语音、小智官方设备、真实相机控制、跨设备传输、专业模型训练和Windows／Android本轮真实设备验收仍单列。</p></div></main>
 <script>const search=document.querySelector('#search'),section=document.querySelector('#section'),status=document.querySelector('#status'),rows=[...document.querySelectorAll('#parameters tbody tr')];function filter(){let n=0,q=search.value.trim().toLowerCase();for(const row of rows){const ok=(!q||row.textContent.toLowerCase().includes(q))&&(!section.value||row.dataset.section===section.value)&&(!status.value||row.dataset.status===status.value);row.hidden=!ok;n+=ok?1:0}document.querySelector('#count').textContent=n+' / '+rows.length}for(const el of [search,section,status])el.addEventListener('input',filter);</script></html>'''
-    gui_title='通过并保留逐项收据' if ui.get('status')=='passed' else '仍待原生操作验收；系统界面工具曾连续超时，不能计作通过'
+    gui_title='通过并保留逐项收据' if ui.get('status')=='passed' else '仍待原生操作验收；Mac锁屏阻断最后原生操作，不能计作通过'
     markup=markup.replace('__TESTS__',str(n)).replace('__GUI__',gui_title).replace('__OPTIONS__',options).replace('__ROWS__',''.join(rows)).replace('__WORKFLOWS__',workflow_html).replace('__PHOTOS__',photos)
     (evidence/'acceptance-report.html').write_text(markup)
     print(json.dumps({'parameters':len(measured),'counts':result['counts'],'uniquePassedSwiftTests':len(passed_tests),'gui':ui['status']},ensure_ascii=False))

@@ -347,6 +347,46 @@ final class AlgorithmEffectTests: XCTestCase {
             check(id,"both perspective directions produce distinct bounded corrections",a.difference(gridBase),b.difference(gridBase),a.width==384 && a.height==256 && b.width==384 && b.height==256 && a.difference(gridBase)>0.01 && b.difference(gridBase)>0.01 && a.difference(b)>0.01)
         }
     }
+    func testPerspectiveCorrectionStraightensKnownConvergingLines() async throws {
+        defer{persist("perspective-contracts")}
+        let worker=try PhotoProcessor()
+        for vertical in [true,false] {for sign in [-1.0,1.0] {
+            let id=vertical ? "geometry.vertical":"geometry.horizontal"
+            // A photographed rectangular board is a known trapezoid. Lines at
+            // fixed board coordinates converge in the input; rectification
+            // must make them parallel. No CI perspective filter builds input.
+            let source=try write("trapezoid-\(vertical)-\(sign)"){x,y in
+                let t=vertical ? Double(y)/255:Double(x)/383
+                let inset=(sign>0 ? 1-t:t)*(vertical ? 48:32)
+                let full=vertical ? 384.0:256.0
+                let a=vertical ? Double(x):Double(y)
+                let marker=inset+(full-2*inset)*0.25
+                if abs(a-marker)<2 {return RGB(0.9,0.1,0.1)}
+                let v=a>=inset && a<=full-inset ? 0.15:0.02
+                return RGB(v,v,v)
+            }
+            let before=try await render(source,neutral(),worker)
+            let after=try await render(source,setting(id,Float(sign*0.25)),worker)
+            func drift(_ p:AuditPixels)->Double {
+                func position(_ coordinate:Int)->Double {
+                    var sum=0.0,n=0.0
+                    let length=vertical ? p.width:p.height
+                    for a in 0..<length {
+                        let x=vertical ? a:coordinate,y=vertical ? coordinate:a,k=(y*p.width+x)*4
+                        let weight=max(0,Double(p.bytes[k])-Double(p.bytes[k+1])-30)
+                        sum+=Double(a)*weight;n+=weight
+                    }
+                    XCTAssertGreaterThan(n,0,"The known marker must remain visible")
+                    return sum/max(1,n)
+                }
+                let length=vertical ? p.height:p.width
+                return abs(position(length/4)-position(length*3/4))
+            }
+            let a=drift(before),b=drift(after)
+            check(id,"matching perspective correction makes known converging lines parallel",a,b,a>5 && b<1.5 && b<a*0.2)
+            XCTAssertEqual(after.width,384);XCTAssertEqual(after.height,256)
+        }}
+    }
 }
 
 private struct AuditPixels {
