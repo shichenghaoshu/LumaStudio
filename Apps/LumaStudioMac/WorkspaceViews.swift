@@ -172,7 +172,7 @@ struct MacEditWorkspace: View {
                     }
                 }.padding(.horizontal,12).padding(.bottom,16).disabled(model.selected==nil || (model.agentBusy && tab != .assistant))
             }.id(tab)
-            HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.recipeSyncPresented=true}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
+            HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.presentRecipeSynchronization()}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
         }.background(Color(white:0.095))
     }
     private var recipeInspector: some View {
@@ -195,7 +195,7 @@ struct MacEditWorkspace: View {
             }
             InspectorSection("应用到同组照片") {
                 Text("按分组同步到所选照片，保留各自的裁剪、局部区域与已锁定参数。").font(.caption).foregroundStyle(.secondary)
-                Button{model.recipeSyncPresented=true}label:{Label("选择照片并同步…",systemImage:"arrow.triangle.2.circlepath")}.font(.caption).disabled(!model.canSynchronize)
+                Button{model.presentRecipeSynchronization()}label:{Label("选择照片并同步…",systemImage:"arrow.triangle.2.circlepath")}.font(.caption).disabled(!model.canSynchronize)
                 Button{openBatch()}label:{Label("前往批量导出…",systemImage:"square.grid.2x2")}.font(.caption)
                 if !model.workflowStatus.isEmpty {Text(model.workflowStatus).font(.caption).foregroundStyle(studioAccent)}
                 if model.lastRecipeSync != nil {Button("撤回上次同步"){model.undoRecipeSynchronization()}.font(.caption).disabled(!model.canSynchronize)}
@@ -387,7 +387,7 @@ private struct MacWorkspaceFilmstrip: View {
                 TextField("查找照片",text:$model.photoFilter.query).textFieldStyle(.plain).font(.system(size:10)).padding(.horizontal,8).padding(.vertical,4).background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:4)).frame(width:100).accessibilityLabel("查找照片")
                 PhotoFilterMenu(model:model).font(.system(size:10)).fixedSize()
                 PhotoReviewMenu(model:model,ids:Set([model.selectedID].compactMap{$0})).font(.system(size:10)).fixedSize()
-                Button("同步…"){model.recipeSyncPresented=true}.font(.system(size:10)).disabled(!model.canSynchronize)
+                Button("同步…"){model.presentRecipeSynchronization()}.font(.system(size:10)).disabled(!model.canSynchronize)
                 Button {
                     if model.selection.isEmpty {model.selection=Set(photos.map(\.id))};model.page = .batch
                 } label:{Label("批量…",systemImage:"square.grid.2x2").font(.system(size:10))}.buttonStyle(.borderless).disabled(photos.isEmpty)

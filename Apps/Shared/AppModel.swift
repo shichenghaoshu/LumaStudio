@@ -15,6 +15,7 @@ import PhotoCore
     var photoFilter=PhotoFilter() { didSet { if photoFilter != oldValue { pruneHiddenSelection() } } }
     var reviewBusy=false
     var recipeSyncPresented=false
+    var recipeSyncGroups=RecipeSyncGroup.recommended
     var workflowBusy=false
     var lastRecipeSync: RecipeSyncTransaction?
     var workflowStatus=""
@@ -396,9 +397,15 @@ import PhotoCore
         if !failures.isEmpty { message=failures.prefix(6).joined(separator:"\n") }
     }
     func oneClickBeauty() { recipe.beauty.enabled=true }
-    func applyBeautyStyle(_ style: BeautyStyle) {
+    func applyBeautyStyle(_ style: BeautyStyle,intensity: BeautyIntensity = .standard) {
+        guard !agentBusy,!workflowBusy,batchSnapshot?.active != true else {return}
         endParameterGesture()
-        recipe.beauty=style.settings
+        do {recipe=Recipe(document:try style.applying(to:recipe.document,intensity:intensity))}
+        catch {message=error.localizedDescription}
+    }
+    func presentRecipeSynchronization(groups: Set<RecipeSyncGroup> = RecipeSyncGroup.recommended) {
+        guard canSynchronize else {return}
+        endParameterGesture();recipeSyncGroups=groups;recipeSyncPresented=true
     }
     func reset() { profile=nil;recipe=Recipe() }
     func removeReference() { profile=nil;recipe.color.referenceProfileID=nil }

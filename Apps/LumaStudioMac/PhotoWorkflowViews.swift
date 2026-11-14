@@ -100,7 +100,7 @@ struct PhotoWorkflowToolbar: View {
                 PhotoFilterMenu(model:model).fixedSize()
                 PhotoReviewMenu(model:model,ids:model.selection,title:"标记所选").fixedSize()
                 Spacer(minLength:8)
-                Button("同步所选参数…"){model.recipeSyncPresented=true}.disabled(!model.canSynchronize)
+                Button("同步所选参数…"){model.presentRecipeSynchronization()}.disabled(!model.canSynchronize)
                 if model.lastRecipeSync != nil {
                     Button("撤回上次同步"){model.undoRecipeSynchronization()}.disabled(model.workflowBusy || model.agentBusy || model.batchSnapshot?.active == true)
                 }
@@ -116,11 +116,12 @@ struct RecipeSyncSheet: View {
     let source: PhotoAsset?
     let sourceRecipe: Recipe
     @State private var targets: Set<UUID>
-    @State private var groups = RecipeSyncGroup.recommended
+    @State private var groups: Set<RecipeSyncGroup>
     @State private var applying = false
     @State private var failure: String?
     init(model: AppModel) {
         self.model=model;source=model.selected;sourceRecipe=model.recipe
+        _groups=State(initialValue:model.recipeSyncGroups)
         _targets=State(initialValue:model.selection.subtracting(Set([model.selectedID].compactMap{$0})).intersection(Set(model.visibleAssets.map(\.id))))
     }
     private var candidates: [PhotoAsset] {model.visibleAssets.filter{$0.id != source?.id}}
