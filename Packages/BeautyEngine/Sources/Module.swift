@@ -11,21 +11,24 @@ public final class BeautyProcessor {
     private let intensiveKernel: CIColorKernel
     private let shape: FaceShapeProcessor
     private let metalBeauty=MetalPetalBeauty()
+    private let useMetalPetal: Bool
     public private(set) var lastBackend="美颜未开启"
     public var metalPetalAvailable: Bool { metalBeauty.available }
-    public init(modelURL: URL? = nil) throws {
+    public init(modelURL: URL? = nil,useMetalPetal: Bool = true) throws {
+        self.useMetalPetal=useMetalPetal
         segmentation=SkinSegmentation(modelURL:modelURL)
         shape=try FaceShapeProcessor()
         guard let texture=CIColorKernel(source:"""
-        kernel vec4 lumaTexture(__sample original, __sample low, __sample smoothLow, float strength, float repair, float preservation, float threshold) {
+        kernel vec4 lumaTexture(__sample original, __sample low, __sample smoothLow, float strength, float repair, float preservation, float recovery, float threshold) {
             vec3 detail = original.rgb - low.rgb;
             float redness = max(0.0, original.r - 0.5*(original.g+original.b) - (low.r-0.5*(low.g+low.b)));
             float darkSpot = max(0.0, dot(low.rgb-original.rgb, vec3(0.2126,0.7152,0.0722)));
             // Small red/dark anomalies are attenuated gently; default never erases all marks.
             float anomaly = smoothstep(threshold,threshold+0.065,redness) * smoothstep(0.005,0.07,darkSpot);
-            float keep = preservation - repair * anomaly * 0.22;
-            vec3 retouched = smoothLow.rgb + detail * keep;
-            return vec4(mix(original.rgb, retouched, strength), original.a);
+            vec3 retouched = smoothLow.rgb + detail * preservation;
+            vec3 result = mix(original.rgb, retouched, strength) + detail * preservation * recovery;
+            result = mix(result,low.rgb,repair * anomaly * 0.18);
+            return vec4(result, original.a);
         }
         """), let tone=CIColorKernel(source:"""
         kernel vec4 lumaTone(__sample original, __sample low, float amount, float uniformity) {
@@ -65,31 +68,31 @@ public final class BeautyProcessor {
         textureKernel=texture;toneKernel=tone;detailKernel=detail;intensiveKernel=intensive
     }
     public func apply(_ image: CIImage, settings: BeautySettings, analysis: SkinAnalysis,context: CIContext?=nil) throws -> CIImage {
-        guard settings.enabled,settings.strength>0,analysis.faceCount>0 else { lastBackend=analysis.faceCount>0 ? "美颜未开启" : "未检测到人脸，未执行美颜";return image }
+        guard settings.enabled,analysis.faceCount>0 else { lastBackend=analysis.faceCount>0 ? "美颜未开启" : "未检测到人脸，未执行美颜";return image }
         let scale=max(image.extent.width,image.extent.height)/1600
         let low=image.clampedToExtent().applyingFilter("CIGaussianBlur",parameters:[kCIInputRadiusKey:max(0.4,CGFloat(settings.radius)*0.275*scale)]).cropped(to:image.extent)
         // Edge-preserving smoothing operates on low frequencies, not on the whole face output.
         let smooth=low.applyingFilter("CINoiseReduction",parameters:["inputNoiseLevel":0.035,"inputSharpness":0.2]).cropped(to:image.extent)
         let textured: CIImage?
-        do {
+        if settings.strength>0 || settings.blemishRemoval>0 || settings.detailRecovery>0 { do {
             // Resolve the preceding lazy CI graph in its own working color space before
             // crossing into MetalPetal's separate CI context. Keep half-float precision.
             let metalInput: CIImage
             if let context,let cg=context.createCGImage(image,from:image.extent,format:.RGBAh,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) { metalInput=CIImage(cgImage:cg) }
             else { metalInput=image }
-            if let filtered=try metalBeauty.apply(metalInput,settings:settings) {
+            if useMetalPetal,let filtered=try metalBeauty.apply(metalInput,settings:settings) {
                 textured=detailKernel.apply(extent:image.extent,arguments:[image,low,filtered,settings.blemishRemoval,settings.texturePreservation,settings.detailRecovery,settings.blemishThreshold])
                 lastBackend="MetalPetal 高通磨皮 + 纹理／五官保护"
             } else {
-                textured=textureKernel.apply(extent:image.extent,arguments:[image,low,smooth,settings.strength*settings.smoothing,settings.blemishRemoval,settings.texturePreservation,settings.blemishThreshold])
-                lastBackend="传统频率分离（MetalPetal 在当前设备不可用）"
+                textured=textureKernel.apply(extent:image.extent,arguments:[image,low,smooth,settings.strength*settings.smoothing,settings.blemishRemoval,settings.texturePreservation,settings.detailRecovery,settings.blemishThreshold])
+                lastBackend="传统频率分离（MetalPetal 未启用或不可用）"
             }
         } catch {
-            textured=textureKernel.apply(extent:image.extent,arguments:[image,low,smooth,settings.strength*settings.smoothing,settings.blemishRemoval,settings.texturePreservation,settings.blemishThreshold])
+            textured=textureKernel.apply(extent:image.extent,arguments:[image,low,smooth,settings.strength*settings.smoothing,settings.blemishRemoval,settings.texturePreservation,settings.detailRecovery,settings.blemishThreshold])
             lastBackend="MetalPetal 失败，已使用传统频率分离"
-        }
+        }} else {textured=image;lastBackend="Core Image 独立肤色处理"}
         guard let textured,
-              var toned=toneKernel.apply(extent:image.extent,arguments:[textured,low,settings.skinTone*settings.strength,settings.toneUniformity]) else { throw LumaError.invalidImage("美颜纹理合成") }
+              var toned=toneKernel.apply(extent:image.extent,arguments:[textured,low,settings.skinTone,settings.toneUniformity]) else { throw LumaError.invalidImage("美颜纹理合成") }
         if settings.skinTemperature != 6500 || settings.skinTint != 0 {toned=toned.applyingFilter("CITemperatureAndTint",parameters:["inputNeutral":CIVector(x:CGFloat(settings.skinTemperature),y:CGFloat(settings.skinTint)),"inputTargetNeutral":CIVector(x:6500,y:0)])}
         if settings.skinBrightness != 0 {toned=toned.applyingFilter("CIExposureAdjust",parameters:[kCIInputEVKey:settings.skinBrightness])}
         if settings.skinSaturation != 1 {toned=toned.applyingFilter("CIColorControls",parameters:[kCIInputSaturationKey:settings.skinSaturation])}

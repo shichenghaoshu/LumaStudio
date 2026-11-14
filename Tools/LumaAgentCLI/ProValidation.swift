@@ -8,6 +8,14 @@ import UniformTypeIdentifiers
 enum ProValidation {
     static func execute(_ args: [String]) async throws -> Bool {
         guard let command=args.first else {return false}
+        if command=="parameter-catalog" {
+            struct Entry: Encodable {
+                let id: String,title: String,section: String,sectionTitle: String,unit: String
+                let minimum: Float,maximum: Float,defaultValue: Float,step: Float
+            }
+            try LumaAgentCLI.output(ParameterCatalog.all.map{p in Entry(id:p.id,title:p.title,section:p.section.rawValue,sectionTitle:p.section.title,unit:p.unit,minimum:p.range.lowerBound,maximum:p.range.upperBound,defaultValue:p.defaultValue,step:p.step)})
+            return true
+        }
         if command=="credential-status" {
             do {
                 let key=try IntegrationCredentials.read("cloud."+CloudProvider.deepseek.baseURL,allowAuthenticationUI:false)
@@ -22,7 +30,13 @@ enum ProValidation {
             try await validate(folder:URL(fileURLWithPath:args[1]),output:URL(fileURLWithPath:args[2]));return true
         }
         if command=="batch",args.count>=4 {
-            try await batch(folder:URL(fileURLWithPath:args[1]),output:URL(fileURLWithPath:args[2]),instruction:args[3],online:args.contains("--deepseek"));return true
+            var sessionKey: String?
+            if args.contains("--key-stdin") {
+                guard args.contains("--deepseek"),let data=try FileHandle.standardInput.read(upToCount:1025),data.count<=1024,
+                      let value=String(data:data,encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines),!value.isEmpty else {throw LumaError.unsupported("请通过标准输入提供本次诊断密钥，不要将密钥写入命令参数")}
+                sessionKey=value
+            }
+            try await batch(folder:URL(fileURLWithPath:args[1]),output:URL(fileURLWithPath:args[2]),instruction:args[3],online:args.contains("--deepseek"),sessionKey:sessionKey);return true
         }
         return false
     }
@@ -56,14 +70,14 @@ enum ProValidation {
         try write(["scope":"Real independently sourced scenes. Exports use the full-resolution decode path with a 1600px output limit.","files":reports],to:output.appendingPathComponent("format-report.json"))
         try LumaAgentCLI.output(reports.map{["input":$0["input"] as? String ?? "","decoded":String(describing:$0["decoded"] ?? false)]})
     }
-    static func batch(folder: URL,output: URL,instruction: String,online: Bool) async throws {
+    static func batch(folder: URL,output: URL,instruction: String,online: Bool,sessionKey: String?=nil) async throws {
         let inputs=try photos(folder)
         guard !inputs.isEmpty,inputs.count<=64 else {throw LumaError.unsupported("诊断批次需要 1–64 张照片")}
         try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
         let before=try inputs.map{try ContentDigest.sha256($0)}
         let history=try LocalHistoryStore(root:output.appendingPathComponent("history"))
         var settings=CloudSettings();settings.mode = .online;settings.provider = .deepseek;settings.baseURL=CloudProvider.deepseek.baseURL;settings.model=CloudProvider.deepseek.model;settings.fallbackToLocal=false
-        let key=online ? try IntegrationCredentials.read(settings.credentialAccount,allowAuthenticationUI:false) : nil
+        let key=online ? try (sessionKey ?? IntegrationCredentials.read(settings.credentialAccount,allowAuthenticationUI:false)) : nil
         if online,key==nil {throw LumaError.unsupported("请先在 Mac 接入设置中保存 DeepSeek 密钥；诊断不接受命令行密钥")}
         let planner: any AgentPlanner = if let key {OnlineAgentPlanner(settings:settings,key:key)} else {RulesAgentPlanner()}
         let queue=BatchProcessor(concurrency:2,journalURL:output.appendingPathComponent("queue.json"))

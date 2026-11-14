@@ -5,6 +5,16 @@ import ColorEngine
 
 /// Global controls run on Core Image; HSL/curves/grading are compiled to one bounded 25³ LUT.
 enum RecipeAdjustments {
+    // CIHighlightShadowAdjust clamps inputHighlightAmount to 0...1: values
+    // above its neutral 1 do not lift highlights. Positive UI adjustments use
+    // a separate luminance-weighted exposure lift, preserving hue/headroom.
+    private static let highlightLift=CIColorKernel(source:"""
+    kernel vec4 lumaHighlightLift(__sample original,float amount) {
+        float y=dot(original.rgb,vec3(0.2126,0.7152,0.0722));
+        float weight=smoothstep(0.18,0.85,y);
+        return vec4(original.rgb*exp2(amount*weight*0.65),original.a);
+    }
+    """)!
     private final class CompiledColor: NSObject {
         let lut: LUT3D
         init(_ lut: LUT3D) {self.lut=lut}
@@ -18,8 +28,11 @@ enum RecipeAdjustments {
     static func global(_ image: CIImage,_ g: GlobalAdjustments) -> CIImage {
         var r=image.applyingFilter("CIExposureAdjust",parameters:[kCIInputEVKey:g.exposure])
             .applyingFilter("CIColorControls",parameters:[kCIInputContrastKey:g.contrast,kCIInputSaturationKey:g.saturation,kCIInputBrightnessKey:g.brightness])
-        if g.highlights != 0 || g.shadows != 0 {
-            r=r.applyingFilter("CIHighlightShadowAdjust",parameters:["inputHighlightAmount":1+g.highlights,"inputShadowAmount":g.shadows,"inputRadius":max(image.extent.width,image.extent.height)/80])
+        if g.highlights < 0 || g.shadows != 0 {
+            r=r.applyingFilter("CIHighlightShadowAdjust",parameters:["inputHighlightAmount":1+min(0,g.highlights),"inputShadowAmount":g.shadows,"inputRadius":max(image.extent.width,image.extent.height)/80])
+        }
+        if g.highlights>0 {
+            r=highlightLift.apply(extent:image.extent,arguments:[r,g.highlights])!
         }
         if g.whites != 0 || g.blacks != 0 {
             // Piecewise monotone-ish luminance curve: lift/compress endpoints without changing extent.
@@ -79,7 +92,7 @@ enum RecipeAdjustments {
             c=RGB(interpolate(interpolate(c.r,curves.master),curves.red),interpolate(interpolate(c.g,curves.master),curves.green),interpolate(interpolate(c.b,curves.master),curves.blue))
             let y=0.2126*c.r+0.7152*c.g+0.0722*c.b
             func smooth(_ low: Double,_ high: Double,_ x: Double)->Double {let t=min(1,max(0,(x-low)/(high-low)));return t*t*(3-2*t)}
-            let width=0.05+Double(grade.blending)*0.28,shift=Double(grade.balance)*0.18
+            let width=0.05+Double(grade.blending)*0.28,shift = -Double(grade.balance)*0.18
             let sw=1-smooth(0.33+shift-width,0.33+shift+width,y),hw=smooth(0.67+shift-width,0.67+shift+width,y),mw=max(0,1-sw-hw)
             let shadow=sw*Double(grade.shadowSaturation)*Double(grade.intensity),highlight=hw*Double(grade.highlightSaturation)*Double(grade.intensity),middle=mw*Double(grade.midtoneSaturation)*Double(grade.intensity)
             let lum=(sw*Double(grade.shadowLuminance)+mw*Double(grade.midtoneLuminance)+hw*Double(grade.highlightLuminance))*Double(grade.intensity)

@@ -112,6 +112,7 @@ struct ProInspectorView: View {
             Text(model.rawCapabilities.description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if model.selected?.isRAW != true || model.useCompanionJPEG {Text("RAW 解码控制仅作用于原始 RAW 文件。").font(.caption).foregroundStyle(.secondary)}
             rows(ParameterCatalog.section(.raw))
+            Text("缩小预览可能看不到 RAW 解码细节的变化。RAW 锐度请在原尺寸导出中检查；预览锐化可使用“细节”面板。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             Button("恢复相机白平衡"){model.editDocument{$0.raw.temperature=nil;$0.raw.tint=nil}}.font(.caption)
             Toggle("快速草稿解码",isOn:$model.recipe.document.raw.draft).font(.caption).disabled(!model.rawCapabilities.description.hasPrefix("CIRAWFilter"))
             Toggle("使用内建镜头校正",isOn:Binding(get:{model.recipe.raw.lensCorrection ?? ((model.rawCapabilities.defaults["raw.lensCorrection"] ?? 0)>0)},set:{v in model.editDocument{$0.raw.lensCorrection=v}})).font(.caption).disabled(!model.rawCapabilities.lensCorrection)

@@ -33,7 +33,7 @@ enum ImageExport {
         properties[kCGImageDestinationEmbedThumbnail]=false
         var tiff=properties[kCGImagePropertyTIFFDictionary] as? [CFString:Any] ?? [:]
         tiff[kCGImagePropertyTIFFXResolution]=settings.dpi;tiff[kCGImagePropertyTIFFYResolution]=settings.dpi;tiff[kCGImagePropertyTIFFResolutionUnit]=2;tiff[kCGImagePropertyTIFFOrientation]=1
-        tiff[kCGImagePropertyTIFFSoftware]="LumaStudio 0.4.0"
+        tiff[kCGImagePropertyTIFFSoftware]="LumaStudio"
         if settings.format == .tiff {tiff[kCGImagePropertyTIFFCompression]=5}
         properties[kCGImagePropertyTIFFDictionary]=tiff
         if settings.preserveEXIF {

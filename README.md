@@ -4,6 +4,8 @@
 
 [下载 Mac 0.5.1](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.1) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.1 使用说明与验证](Documentation/RELEASE_0.5.1.md)
 
+**0.5.2 算法验收候选**已完成119项Release检查、184参数逐项证据和真实DeepSeek执行；原生界面复核尚未结束，因此公开稳定版仍为0.5.1。详见[实际算法验收范围](Documentation/ALGORITHM_ACCEPTANCE.md)。
+
 [Mac 0.5.1 性能更新](Documentation/RELEASE_0.5.1.md)提供交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），已完成独立测试图库中的原生界面、重启、紧凑布局与全尺寸美颜导出验收；原图库原片、配方与选片标记核对一致。
 
 当前提供 **184 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
