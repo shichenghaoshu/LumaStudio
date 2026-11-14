@@ -75,8 +75,9 @@ public struct CameraCapabilities: Codable, Equatable, Sendable {
     public var supportsRAWTransfer = false
     public init() {}
 }
-public enum RenderTier: Sendable { case thumbnail, preview, fullResolution
-    public var maxDimension: Int? { switch self { case .thumbnail: return 360; case .preview: return 1600; case .fullResolution: return nil } }
+public enum RenderTier: Sendable { case thumbnail, interactive, preview, fullResolution
+    public var maxDimension: Int? { switch self { case .thumbnail: return 360; case .interactive: return 960; case .preview: return 1600; case .fullResolution: return nil } }
+    public var isPreview: Bool {self == .interactive || self == .preview}
 }
 extension ColorSettings {
     private enum Keys: String,CodingKey { case enabled,presetID,intensity,exposure,contrast,saturation,temperature,referenceProfileID }

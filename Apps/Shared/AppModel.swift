@@ -261,15 +261,16 @@ import PhotoCore
                 if previewBypassedParameters.contains("beauty.enabled") {previewRecipe.document.beauty.enabled=false}
                 if previewBypassedParameters.contains("masks") {previewRecipe.document.masks=[]}
                 let persistedRecipe=recipe,url=workingURL(asset),reference=profile,maskID=showMaskOverlay ? activeMaskID : nil
+                let tier: RenderTier=parameterGestureBase == nil ? .preview : .interactive
                 do {
-                    let result=try await processor.render(url:url,recipe:previewRecipe,profile:reference,maskPreviewID:maskID)
+                    let result=try await processor.render(url:url,recipe:previewRecipe,tier:tier,profile:reference,maskPreviewID:maskID)
                     try Task.checkCancellation()
                     guard previewWorkerID==worker,selectedID==asset.id else {return}
                     // During a gesture, completed frames are useful even while a
                     // newer value waits. A stable final value is always rendered.
                     if token==renderGeneration || parameterGestureBase != nil {
                         preview=result.image;original=result.original;faceCount=result.faceCount;maskPreview=result.localMaskPreview
-                        renderStatus="\(result.faceCount) 张人脸 · \(result.beautyBackend) · \(Int(result.milliseconds)) ms"
+                        renderStatus="\(tier == .interactive ? "交互预览" : "精细预览") · \(result.faceCount) 张人脸 · \(result.beautyBackend) · \(Int(result.milliseconds)) ms"
                         if parameterGestureBase != nil {LumaLog.pipeline.debug("Interactive preview frame completed")}
                     }
                     if token==renderGeneration {
@@ -723,6 +724,9 @@ extension AppModel {
     func endParameterGesture() {
         guard let previous=parameterGestureBase else {return};parameterGestureBase=nil
         if previous != recipe {pushUndo(previous)}
+        // Focus changes and overlay edits can finish a low-resolution frame even
+        // when the numeric field ends at its starting value. Always refine it.
+        schedulePreview()
     }
     func editDocument(_ change: (inout EditRecipe)->Void) {
         guard !agentBusy else {return};var d=recipe.document;change(&d);d.operations=[]

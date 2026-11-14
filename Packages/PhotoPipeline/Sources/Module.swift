@@ -20,10 +20,11 @@ public struct RenderResult {
     public let localMaskPreview: CGImage?
 }
 public final class ImageDecoder: @unchecked Sendable {
-    private let cache=NSCache<NSURL,CIImage>()
+    private let cache=NSCache<NSString,CIImage>()
     public init() { cache.countLimit=3; cache.totalCostLimit=48*1024*1024 }
     public func decode(_ url: URL,tier: RenderTier,raw: RAWSettings = RAWSettings()) throws -> CIImage {
-        if case .preview=tier, raw == RAWSettings(), let cached=cache.object(forKey:url as NSURL) { return cached }
+        let cacheKey=(RAWBackendRouter.stamp(url)+"|"+String(tier.maxDimension ?? 0)) as NSString
+        if tier.isPreview,raw == RAWSettings(),let cached=cache.object(forKey:cacheKey) {return cached}
         if PhotoFileType.isRAW(url),tier == .thumbnail {
             if let source=CGImageSourceCreateWithURL(url as CFURL,nil),let cg=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:360] as CFDictionary) {return CIImage(cgImage:cg)}
             let preview=try decode(url,tier:.preview,raw:raw),scale=min(1,360/max(preview.extent.width,preview.extent.height))
@@ -68,7 +69,7 @@ public final class ImageDecoder: @unchecked Sendable {
             } else { image=CIImage(cgImage:cg) }
         }
         guard image.extent.width>0,image.extent.height>0,image.extent.width.isFinite,image.extent.height.isFinite else { throw LumaError.invalidImage(url.lastPathComponent) }
-        if tier == .preview,raw == RAWSettings() { cache.setObject(image,forKey:url as NSURL,cost:Int(image.extent.width*image.extent.height)*8) }
+        if tier.isPreview,raw == RAWSettings() {cache.setObject(image,forKey:cacheKey,cost:Int(image.extent.width*image.extent.height)*8)}
         return image
     }
     private func maximum(_ size: CGSize)->CGFloat { max(size.width,size.height) }
@@ -108,33 +109,43 @@ public enum SafeExport {
     }
 }
 public actor PhotoProcessor {
+    private final class CachedSkinAnalysis {
+        let value: SkinAnalysis
+        init(_ value: SkinAnalysis) {self.value=value}
+    }
     public nonisolated let context: CIContext
     public nonisolated let decoder=ImageDecoder()
     private let beauty: BeautyProcessor
     private let color: ColorProcessor
     private let previewCache=NSCache<NSString,CIImage>()
-    private var skinCache: (String,SkinAnalysis)?
+    private let skinCache=NSCache<NSString,CachedSkinAnalysis>()
     private let semanticMasks=SemanticMaskEngine()
     private var maskCache: (String,Set<MaskKind>,[MaskKind:CIImage])?
     public init(modelURL: URL? = nil) throws {
         if let device=MTLCreateSystemDefaultDevice() { context=CIContext(mtlDevice:device,options:[.cacheIntermediates:false,.workingColorSpace:CGColorSpace(name:CGColorSpace.extendedLinearSRGB)!]) }
         else { context=CIContext(options:[.useSoftwareRenderer:true,.cacheIntermediates:false]) }
-        beauty=try BeautyProcessor(modelURL:modelURL); color=try ColorProcessor();previewCache.countLimit=2;previewCache.totalCostLimit=40*1024*1024
+        beauty=try BeautyProcessor(modelURL:modelURL); color=try ColorProcessor();previewCache.countLimit=2;previewCache.totalCostLimit=40*1024*1024;skinCache.countLimit=2
     }
     private func prepared(url: URL,recipe: Recipe,tier: RenderTier,profile: ColorProfile?,raw: RAWSettings,maskPreviewID: String?=nil) throws -> (CIImage,CIImage,SkinAnalysis?,CIImage?) {
         try Task.checkCancellation()
         let r=try recipe.validated()
         if let edit=r.edit { try ToolRegistry().validate(edit) }
         if r.color.referenceProfileID != nil && profile?.id != r.color.referenceProfileID { throw LumaError.unsupported("配方引用的色彩档案未找到，请先导入对应档案。") }
-        let attributes=try? FileManager.default.attributesOfItem(atPath:url.path)
-        let stamp=(attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        let rawKey=(try? JSONEncoder().encode(raw).base64EncodedString()) ?? ""
-        let key=url.path+"|"+String(stamp)+"|"+rawKey
+        let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys]
+        let rawKey=(try? encoder.encode(raw).base64EncodedString()) ?? ""
+        let sourceKey=RAWBackendRouter.stamp(url)+"|"+rawKey
+        let key=sourceKey+"|"+String(tier.maxDimension ?? 0)
         let original: CIImage
-        if tier == .preview,let cached=previewCache.object(forKey:key as NSString) { original=cached }
+        if tier.isPreview,let cached=previewCache.object(forKey:key as NSString) { original=cached }
         else {
-            let decoded=try decoder.decode(url,tier:tier,raw:raw)
-            if tier == .preview {
+            let decoded: CIImage
+            if tier == .interactive,let fine=previewCache.object(forKey:(sourceKey+"|1600") as NSString) {
+                // Reuse the already decoded fine preview instead of decoding the
+                // RAW again when a gesture starts. Both quality levels are bounded.
+                let scale=min(1,CGFloat(tier.maxDimension!)/max(fine.extent.width,fine.extent.height))
+                decoded=fine.transformed(by:CGAffineTransform(scaleX:scale,y:scale))
+            } else {decoded=try decoder.decode(url,tier:tier,raw:raw)}
+            if tier.isPreview {
                 guard let cg=context.createCGImage(decoded,from:decoded.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) else { throw LumaError.invalidImage("预览缓存") }
                 original=CIImage(cgImage:cg)
                 previewCache.setObject(original,forKey:key as NSString,cost:cg.width*cg.height*4)
@@ -143,8 +154,8 @@ public actor PhotoProcessor {
         try Task.checkCancellation()
         let analysis: SkinAnalysis?
         if r.beauty.enabled || profile != nil || r.edit?.evaluation.preserveSkin==true || r.edit?.masks.contains(where:{$0.kind == .skin})==true {
-            if tier == .preview,let cached=skinCache,cached.0==key { analysis=cached.1 }
-            else { let result=try beauty.segmentation.analyze(original,context:context);analysis=result;if tier == .preview { skinCache=(key,result) } }
+            if tier.isPreview,let cached=skinCache.object(forKey:key as NSString) {analysis=cached.value}
+            else {let result=try beauty.segmentation.analyze(original,context:context);analysis=result;if tier.isPreview {skinCache.setObject(CachedSkinAnalysis(result),forKey:key as NSString)}}
         } else { analysis=nil }
         try Task.checkCancellation()
         var image=original
@@ -159,10 +170,10 @@ public actor PhotoProcessor {
             let kinds=Set(edit.masks.map(\.kind)).subtracting([.brush])
             let maskKey=key+"|\(Int(original.extent.width))x\(Int(original.extent.height))"
             let masks: [MaskKind:CIImage]
-            if tier == .preview,let cached=maskCache,cached.0==maskKey,cached.1==kinds { masks=cached.2 }
+            if tier.isPreview,let cached=maskCache,cached.0==maskKey,cached.1==kinds { masks=cached.2 }
             else {
                 masks=try semanticMasks.masks(for:original,kinds:kinds,skin:analysis?.mask,context:context)
-                if tier == .preview { maskCache=(maskKey,kinds,masks) }
+                if tier.isPreview { maskCache=(maskKey,kinds,masks) }
             }
             for local in edit.masks {
                 try Task.checkCancellation()
@@ -192,7 +203,7 @@ public actor PhotoProcessor {
         try Task.checkCancellation()
         guard let source=context.createCGImage(original,from:original.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) else {throw LumaError.invalidImage("原图对照")}
         let mask: CGImage?
-        if tier == .preview,let analysis,analysis.faceCount>0 { var framing=recipe.document.geometry;framing.chromaticAberration=0;framing.lensVignette=0
+        if tier.isPreview,let analysis,analysis.faceCount>0 { var framing=recipe.document.geometry;framing.chromaticAberration=0;framing.lensVignette=0
             let ci=ProOperators.geometry(analysis.mask,framing)
             mask=context.createCGImage(ci,from:ci.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) } else { mask=nil }
         let backend=recipe.beauty.enabled ? beauty.lastBackend+" · "+(analysis?.backend ?? "") : (analysis?.backend ?? "美颜未开启")
@@ -219,5 +230,5 @@ public actor PhotoProcessor {
         try FileManager.default.moveItem(at:stage,to:destination) // fails instead of overwriting, including races.
         context.clearCaches(); return destination
     }
-    public func releaseCaches() { decoder.clearCache();previewCache.removeAllObjects();skinCache=nil;maskCache=nil;context.clearCaches() }
+    public func releaseCaches() {decoder.clearCache();previewCache.removeAllObjects();skinCache.removeAllObjects();maskCache=nil;context.clearCaches()}
 }

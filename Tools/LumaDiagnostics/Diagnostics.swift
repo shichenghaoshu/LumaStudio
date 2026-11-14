@@ -16,6 +16,7 @@ import Darwin
             case "inspect":try await inspect(source,out)
             case "benchmark":try await benchmark(source,out,count:a.count>3 ? Int(a[3]) ?? 100 : 100)
             case "preview-benchmark":try await previewBenchmark(source,out)
+            case "interaction-benchmark":try await interactionBenchmark(source,out)
             case "import":let library=try PhotoLibrary(root:out);let result=try await library.importPhoto(source);print("Imported \(result.asset.name), RAW=\(result.asset.isRAW), duplicate=\(result.duplicate)")
             default:throw LumaError.unsupported("Unknown command")
             }
@@ -50,6 +51,33 @@ import Darwin
         let report:[String:Any] = ["input":source.lastPathComponent,"sha256":hash,"device":MTLCreateSystemDefaultDevice()?.name ?? "software","build":"Release","scope":"engine preview; not end-to-end UI latency","workloads":reports]
         try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:out.appendingPathComponent("report.json"))
         print("PREVIEW BENCHMARK SUCCESS")
+    }
+    /// Repeated exposure edits with genuine portrait processing. The report names
+    /// each resolution explicitly; these engine timings are not UI frame rates.
+    static func interactionBenchmark(_ source: URL,_ out: URL) async throws {
+        let hash=try ContentDigest.sha256(source)
+        var reports=[[String:Any]]()
+        for (name,beauty) in [("tone",BeautySettings()),("intensive",BeautyStyle.intensive.settings), ("reshape",BeautyStyle.reshape.settings)] {
+            let processor=try PhotoProcessor()
+            var r=Recipe();r.beauty=beauty
+            if name=="tone" {r.beauty.enabled=false}
+            for tier in [RenderTier.preview,.interactive,.preview] {
+            let quality=tier == .interactive ? "interactive" : (reports.contains{($0["workload"] as? String)==name} ? "refined" : "preview")
+            var samples=[Double](),width=0,height=0,faces=0
+            for i in 0..<25 {
+                r.document.global.exposure=Float(i%9)*0.04
+                let result=try await processor.render(url:source,recipe:r,tier:tier)
+                samples.append(result.milliseconds);width=result.image.width;height=result.image.height;faces=result.faceCount
+                if i==24 {try save(result.image,out.appendingPathComponent(name+"-"+quality+".png"))}
+            }
+            let warm=Array(samples.dropFirst()).sorted()
+            reports.append(["workload":name,"quality":quality,"width":width,"height":height,"faces":faces,"cold_ms":samples[0],"warm_median_ms":warm[warm.count/2],"warm_p95_ms":warm[Int(Double(warm.count-1)*0.95)],"samples_ms":samples])
+            }
+        }
+        guard try ContentDigest.sha256(source)==hash else {throw LumaError.corruptData("Original changed")}
+        let report:[String:Any] = ["input":source.lastPathComponent,"sha256":hash,"device":MTLCreateSystemDefaultDevice()?.name ?? "software","build":"Release","scope":"engine preview at named resolutions; not end-to-end UI latency or FPS","workloads":reports]
+        try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:out.appendingPathComponent("report.json"))
+        print("INTERACTION BENCHMARK SUCCESS")
     }
     static func inspect(_ source: URL,_ out: URL) async throws {
         let processor=try PhotoProcessor();var recipe=Recipe();recipe.beauty.enabled=true

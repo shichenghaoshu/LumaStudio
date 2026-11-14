@@ -19,8 +19,9 @@ final class RAWTests: XCTestCase {
     func testRealG9RAWThreeTiersAndExport() async throws {
         guard let fixture=ProcessInfo.processInfo.environment["LUMA_RAW_FIXTURE"] else {throw XCTSkip("Set LUMA_RAW_FIXTURE to a real first-generation G9 RW2")}
         let source=URL(fileURLWithPath:fixture),decoder=ImageDecoder()
-        let thumbnail=try decoder.decode(source,tier:.thumbnail),preview=try decoder.decode(source,tier:.preview),full=try decoder.decode(source,tier:.fullResolution)
+        let thumbnail=try decoder.decode(source,tier:.thumbnail),interactive=try decoder.decode(source,tier:.interactive),preview=try decoder.decode(source,tier:.preview),full=try decoder.decode(source,tier:.fullResolution)
         XCTAssertLessThanOrEqual(max(thumbnail.extent.width,thumbnail.extent.height),360)
+        XCTAssertLessThanOrEqual(max(interactive.extent.width,interactive.extent.height),961)
         XCTAssertLessThanOrEqual(max(preview.extent.width,preview.extent.height),1601)
         XCTAssertGreaterThan(full.extent.width,5000);XCTAssertGreaterThan(full.extent.height,3000)
         let processor=try PhotoProcessor();let dest=FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).jpg");defer{try? FileManager.default.removeItem(at:dest)}

@@ -11,7 +11,8 @@ enum RAWBackendRouter {
     private static var native=[String:Bool]()
     static func stamp(_ url: URL)->String {
         let a=try? FileManager.default.attributesOfItem(atPath:url.path)
-        return url.standardizedFileURL.path+"|"+String(describing:a?[.size])+"|"+String(describing:a?[.modificationDate])
+        let modified=(a?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return url.standardizedFileURL.path+"|"+String(describing:a?[.size])+"|"+String(modified)+"|"+String(describing:a?[.systemFileNumber])
     }
     static func nativeAvailable(_ url: URL)->Bool {
         let key=stamp(url);lock.lock();let cached=native[key];lock.unlock()

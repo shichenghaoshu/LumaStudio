@@ -4,7 +4,7 @@
 
 [下载 Mac、Windows、Android Release](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.0 使用说明、性能证据与平台限制](Documentation/RELEASE_0.5.0.md)
 
-此开发分支提供 [Mac 0.5.1 色标候选功能](Documentation/COLOR_LABELS.md)：五种颜色标签、单张/批量标记与组合筛选。该候选版独立构建，真实界面验收待 Mac 解锁后完成，已发布的 0.5.0 三平台安装包保持不变。
+此开发分支提供 [Mac 0.5.1 优化候选版](Documentation/RELEASE_0.5.1.md)：交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），Release 编译和签名校验通过；原生界面验收仍待 Mac 解锁，候选尚未替换正式应用或公开安装包。
 
 当前提供 **184 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
 
@@ -70,7 +70,7 @@ LUMA_PORTRAIT_FIXTURE="$PWD/work/fixtures/portrait.jpg" swift test
 - `Packages/CloudModel`：URLSession 在线规划、两种 API 格式、钥匙串凭据、严格配方与图片上传约束。
 - `Packages/VoiceBridge`：小智 MCP WebSocket、loopback HTTP、最终文字与有界去重；`Tools/VoiceMCP`：可选 stdio 适配器。
 - `Packages/ColorEngine`：30 个真实原创 LUT、CUBE 导入、RGB 色阶与可选颜色、Lab、直方图、参考色彩档案与肤色保护。
-- `Packages/PhotoPipeline`：ImageIO / CIRAWFilter + LibRaw 0.22.3 备用显影、Metal Core Image context、三级处理、预览缓存、非覆盖导出。
+- `Packages/PhotoPipeline`：ImageIO / CIRAWFilter + LibRaw 0.22.3 备用显影、Metal Core Image context、分级处理、预览缓存、非覆盖导出。
 - `Packages/BatchEngine`：有限并发、逐张独立 AI 方案、计划持久化与复用、暂停/继续/取消、重试、任务 JSON 恢复。
 - `Packages/LocalLibrary`：SwiftData ModelActor、本地索引、SHA256 去重、原片副本和 RAW/JPEG 配对。
 - `Packages/LocalSync`：Bonjour、TLS-PSK、Keychain 配对、分块与完整性校验、受能力限制的远程快门。
