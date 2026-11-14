@@ -60,6 +60,7 @@ struct PhotoReviewBadge: View {
                 Label(review.colorLabel.title,systemImage:"tag.fill").foregroundStyle(review.colorLabel.swatch)
             }
         }.font(.system(size:9,weight:.semibold)).foregroundStyle(review.flag == .rejected ? .white : studioAccent)
+            .lineLimit(1).fixedSize(horizontal:true,vertical:false)
             .padding(.horizontal,4).padding(.vertical,3)
             .background(.black.opacity(review.rating>0 || review.flag != .none || review.colorLabel != .none ? 0.75 : 0),in:RoundedRectangle(cornerRadius:3))
             .accessibilityElement(children:.ignore)
@@ -96,8 +97,8 @@ struct PhotoWorkflowToolbar: View {
             HStack(spacing:14) {
                 Text("显示 \(model.visibleAssets.count) / \(model.assets.count) 张").font(.caption).foregroundStyle(.secondary)
                 TextField("查找照片",text:$model.photoFilter.query).textFieldStyle(.roundedBorder).frame(maxWidth:220).accessibilityLabel("批量查找照片")
-                PhotoFilterMenu(model:model)
-                PhotoReviewMenu(model:model,ids:model.selection,title:"标记所选")
+                PhotoFilterMenu(model:model).fixedSize()
+                PhotoReviewMenu(model:model,ids:model.selection,title:"标记所选").fixedSize()
                 Spacer(minLength:8)
                 Button("同步所选参数…"){model.recipeSyncPresented=true}.disabled(!model.canSynchronize)
                 if model.lastRecipeSync != nil {

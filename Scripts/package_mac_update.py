@@ -35,7 +35,7 @@ def main():
     audit()
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     version, build = info["CFBundleShortVersionString"], info["CFBundleVersion"]
-    if (version, build) != ("0.5.1", "11"):
+    if (version, build) != ("0.5.1", "15"):
         raise RuntimeError("Unexpected update version.")
     executable = app / "Contents/MacOS" / info["CFBundleExecutable"]
     ui, ci = read(evidence / "mac-final-ui.json"), read(evidence / "final-ci.json")

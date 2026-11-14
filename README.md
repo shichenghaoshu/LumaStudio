@@ -1,14 +1,14 @@
 # LumaStudio
 
-原生、非破坏性的摄影工作台。当前版本为 **0.5.0 (9)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。本轮新增 Android / Windows 客户端，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.1 (15)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。本轮新增 Android / Windows 客户端，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
 
-[下载 Mac、Windows、Android Release](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.0 使用说明、性能证据与平台限制](Documentation/RELEASE_0.5.0.md)
+[下载 Mac 0.5.1](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.1) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.1 使用说明与验证](Documentation/RELEASE_0.5.1.md)
 
-此开发分支提供 [Mac 0.5.1 优化候选版](Documentation/RELEASE_0.5.1.md)：交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），Release 编译和签名校验通过；原生界面验收仍待 Mac 解锁，候选尚未替换正式应用或公开安装包。
+[Mac 0.5.1 性能更新](Documentation/RELEASE_0.5.1.md)提供交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），已完成独立测试图库中的原生界面、重启、紧凑布局与全尺寸美颜导出验收；原图库原片、配方与选片标记核对一致。
 
 当前提供 **184 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
 
-选片支持星标/旗标、组合筛选和排序；**13 组参数同步与整组撤回**保留目标锁，批量可按统一配方、每张已存设置或逐张 AI 方案导出。步骤见 [选片与同步](Documentation/PIXCAKE_WORKFLOW.md)。最终使用入口为 `Deliverables/LumaStudio.app`，历史包按版本保留。
+选片支持星标/旗标/五色色标、组合筛选和排序；**13 组参数同步与整组撤回**保留目标锁，批量可按统一配方、每张已存设置或逐张 AI 方案导出。步骤见 [选片与同步](Documentation/PIXCAKE_WORKFLOW.md)。最终使用入口为 `Deliverables/LumaStudio.app`，历史包按版本保留。
 
 在线模型、MetalPetal GPU 美颜、Mac 听写和小智接口继续保留。右上角网络图标打开接入设置，详见 [接入说明](Documentation/INTEGRATIONS.md)。API 密钥只存系统钥匙串或本次会话内存；默认不上传照片。当前源码仓库：[shichenghaoshu/LumaStudio](https://github.com/shichenghaoshu/LumaStudio)。仓库目前公开，只含审查后的源码、许可及运行库；不含商业计划书、逆向私有资料、个人照片、凭据或 GGUF 权重。跨平台客户端含一张有来源记录的 CC0 风景示例。
 
@@ -16,7 +16,7 @@
 
 **实际边界：** 第一代 G9 的真实 RW2 样片已解码并全分辨率导出；G9 实机拍摄尚未验收。美颜使用 MetalPetal 高通平滑、强效磨皮与 Vision／传统皮肤蒙版，新增瓷白、红润及关键点引导的瘦脸、大眼；纹理可降至 0，高强度预设允许夸张效果。没有捆绑训练好的商业精修网络。0.4.2 的 DeepSeek 真实连接、单张修图和 8 张独立 RAW 的逐张在线批处理已通过，全部无本地回退；原片哈希保持不变。小智仍仅有本机协议验证，真人语音识别质量未验收。不同机型、压缩方式和系统版本仍须逐文件检查，不能保证所有历史或未来格式。
 
-Mac 性能更新采用细粒度 Observation、后台 RAW 能力探测、过期预览取消与色彩变换缓存。M2 Pro Release 的两组热预览中位数从 32.8 / 34.6 ms 降到 30.3 / 29.1 ms，输出 PNG 校验值完全一致；这是图像引擎观测，不是端到端界面帧率或所有设备保证。
+Mac 性能更新采用细粒度 Observation、后台 RAW 能力探测、有界缓存和 960px 交互/1600px 精细预览。M2 Pro、同一公开人像、Release 构建，强磨皮精细预览热中位数从 48.6ms 降至 23.4ms，交互 9.8ms；加塑形为 48.9→23.8ms，交互 9.7ms。最终精细输出与旧流程逐像素一致。这是图像引擎观测，实际界面还包含调度与显示耗时，不能作为界面帧率或所有设备保证。
 
 Android / Windows 目前提供可离线运行的图库、24 个基础参数、8 色 HSL、30 款原创滤镜、撤销/重做、逐张保存、中心裁切与批量导出。**平台功能范围不同**：完整 184 项专业控制、局部蒙版、16 位/ICC 输出、本地 Qwen 和语音/相机接口仍在 Mac。Portable 配方与 Mac 配方暂不互通。详情见上述客户端文档。
 
@@ -79,6 +79,6 @@ LUMA_PORTRAIT_FIXTURE="$PWD/work/fixtures/portrait.jpg" swift test
 
 ## 验证与未完成项
 
-当前收束记录见 [0.5.0 验证与交付](Documentation/RELEASE_0.5.0.md)。[0.4.2 验证与交付](Documentation/RELEASE_0.4.2.md)、[早期验收记录](Documentation/VALIDATION.md)、[早期性能报告](Documentation/PERFORMANCE.md) 与 [历史逐项状态](Documentation/STATUS.md) 保留为历史阶段证据。原始日志和输出位于 `Artifacts`，公开验证包只选择审查后的记录与公开素材截图。
+当前 Mac 收束记录见 [0.5.1 验证与交付](Documentation/RELEASE_0.5.1.md)。Windows / Android 及上一版记录见 [0.5.0 验证与交付](Documentation/RELEASE_0.5.0.md)。[0.4.2 验证与交付](Documentation/RELEASE_0.4.2.md)、[早期验收记录](Documentation/VALIDATION.md)、[早期性能报告](Documentation/PERFORMANCE.md) 与 [历史逐项状态](Documentation/STATUS.md) 保留为历史阶段证据。原始日志和输出位于 `Artifacts`，公开验证包只选择审查后的记录与公开素材截图。
 
 G9 实机、M1 真机、M 系列实体 iPad、跨实体设备传输、100 张不同场景的连续运行、专业人像主观质量评审仍需完成。该版本没有 G9 内嵌实时取景、拍摄参数调节、G9 直接 Wi-Fi 控制、任意液化、完整五官/身体重塑或自动内容填补；这些入口明确禁用或未开放。

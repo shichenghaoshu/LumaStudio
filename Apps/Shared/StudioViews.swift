@@ -216,7 +216,11 @@ struct BatchWorkspace: View {
             VStack(spacing:4) {
                 Button{if model.selection.contains(asset.id){model.selection.remove(asset.id)}else{model.selection.insert(asset.id)}}label:{PhotoThumbnail(asset:asset,selected:model.selection.contains(asset.id)).overlay(alignment:.topLeading){Image(systemName:model.selection.contains(asset.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(model.selection.contains(asset.id) ? studioAccent : .secondary).padding(10)}}.buttonStyle(.plain).accessibilityLabel("选择批量照片 "+asset.name)
                 #if os(macOS)
-                HStack {PhotoReviewBadge(review:model.review(for:asset.id));Spacer();PhotoReviewMenu(model:model,ids:[asset.id])}.font(.caption2).padding(.horizontal,8)
+                HStack(spacing:4) {
+                    PhotoReviewBadge(review:model.review(for:asset.id))
+                    Spacer(minLength:0)
+                    PhotoReviewMenu(model:model,ids:[asset.id]).labelStyle(.iconOnly).controlSize(.mini).fixedSize()
+                }.font(.caption2).padding(.horizontal,8)
                 #endif
             }
         }}.padding(24)}}

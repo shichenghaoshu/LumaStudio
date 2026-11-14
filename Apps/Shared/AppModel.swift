@@ -323,11 +323,12 @@ import PhotoCore
         let complete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             if response == .OK { self?.handleImport(.success(panel.urls)) }
         }
-        NSApp.activate(ignoringOtherApps:true)
-        if let window=NSApp.keyWindow ?? NSApp.mainWindow {
-            window.makeKeyAndOrderFront(nil)
-            panel.beginSheetModal(for:window,completionHandler:complete)
-        } else { panel.begin(completionHandler:complete) }
+        // Begin after the menu has closed, with a complete AppKit modal
+        // session. This also works before SwiftUI assigns a key/main window.
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps:true)
+            complete(panel.runModal())
+        }
         #else
         importerPresented=true
         #endif
