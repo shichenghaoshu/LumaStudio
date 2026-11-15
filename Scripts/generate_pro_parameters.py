@@ -20,13 +20,16 @@ GLOBAL = [
 ]
 BEAUTY = [
     ('strength',.35,0,1,'磨皮强度',100,0,'%',.01),('radius',8,2,32,'磨皮半径',1,0,' px',.1),
-    ('smoothing',1,0,1,'平滑程度',100,0,'%',.01),('texturePreservation',.94,.6,1,'纹理保留',100,0,'%',.01),
+    ('smoothing',1,0,1,'平滑程度',100,0,'%',.01),('texturePreservation',.94,0,1,'纹理保留',100,0,'%',.01),
     ('detailRecovery',.04,0,.3,'细节恢复',100,0,'%',.005),('sharpness',0,0,1,'皮肤锐度',100,0,'%',.01),
     ('blemishRemoval',.2,0,1,'细小瑕疵弱化',100,0,'%',.01),('blemishThreshold',.025,.005,.1,'瑕疵检测阈值',1000,0,'',.001),
     ('skinTone',.25,0,1,'肤色优化',100,0,'%',.01),('toneUniformity',.16,0,1,'肤色均匀度',100,0,'%',.01),
     ('skinTemperature',6500,2000,12000,'皮肤色温',1,0,' K',1),('skinTint',0,-150,150,'皮肤色调',1,0,'',1),
     ('skinBrightness',0,-1,1,'皮肤亮度',100,0,'',.01),('skinSaturation',1,0,2,'皮肤饱和度',100,-100,'',.01),
     ('shadowRepair',0,0,1,'皮肤暗部修复',100,0,'%',.01),
+    ('retouchBlemishes',0,0,1,'AI 局部祛瑕',100,0,'%',.01),('retouchDodgeBurn',0,0,1,'AI 光影均肤',100,0,'%',.01),
+    ('intensiveSmoothing',0,0,1,'强效磨皮',100,0,'%',.01),('skinWhitening',0,0,1,'瓷白美白',100,0,'%',.01),
+    ('skinRosiness',0,0,1,'红润肤色',100,0,'%',.01),('faceSlimming',0,0,1,'瘦脸',100,0,'%',.01),('eyeEnlargement',0,0,1,'大眼',100,0,'%',.01),
 ]
 DETAIL = [
     ('sharpening',0,0,2,'锐化强度',100,0,'',.01),('radius',1,.2,3,'锐化半径',1,0,' px',.1),
@@ -112,7 +115,16 @@ def struct(name, rows, extra):
     lines += ['    public init() {}','    private enum CodingKeys: String, CodingKey { case '+','.join(fields)+' }','    public init(from decoder: Decoder) throws {','        self.init(); let c = try decoder.container(keyedBy: CodingKeys.self)']
     for key,(typ,default) in fields.items():
         lines.append(f'        {key} = try c.decodeIfPresent({typ.rstrip("?")}.self, forKey: .{key})'+('' if typ.endswith('?') else f' ?? {key}'))
-    return '\n'.join(lines+['    }','}'])
+    lines.append('    }')
+    if name=='BeautySettings':
+        # New optional controls must not change legacy recipe fingerprints at 0.
+        optional={'retouchBlemishes','retouchDodgeBurn','intensiveSmoothing','skinWhitening','skinRosiness','faceSlimming','eyeEnlargement'}
+        lines+=['    public func encode(to encoder: Encoder) throws {','        var c=encoder.container(keyedBy:CodingKeys.self)']
+        for key in fields:
+            line=f'try c.encode({key},forKey:.{key})'
+            lines.append(f'        if {key} != 0 {{{line}}}' if key in optional else '        '+line)
+        lines.append('    }')
+    return '\n'.join(lines+['}'])
 
 def number(row):
     value={'type':'number','minimum':row[2],'maximum':row[3]}

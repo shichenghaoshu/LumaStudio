@@ -2,6 +2,30 @@ import XCTest
 import PhotoCore
 
 final class BeautyPresetWorkflowTests: XCTestCase {
+    func testAIRetouchSeparatesRepairFromWhiteningAndHonorsTargetLocks() throws {
+        let old=try JSONDecoder().decode(BeautySettings.self,from:Data("{\"enabled\":true,\"strength\":0.35}".utf8))
+        XCTAssertEqual(old.retouchBlemishes,0);XCTAssertEqual(old.retouchDodgeBurn,0)
+        for intensity in BeautyIntensity.allCases {
+            let b=BeautyStyle.retouch.settings(intensity:intensity)
+            XCTAssertEqual(b.strength,0);XCTAssertEqual(b.intensiveSmoothing,0)
+            XCTAssertEqual(b.skinWhitening,0);XCTAssertEqual(b.skinBrightness,0)
+            XCTAssertEqual(b.faceSlimming,0);XCTAssertEqual(b.eyeEnlargement,0)
+            XCTAssertGreaterThan(b.retouchBlemishes,0);XCTAssertGreaterThan(b.retouchDodgeBurn,0)
+        }
+        var original=EditRecipe();original.beauty.retouchBlemishes=0.15
+        original.geometry.cropAspect=1.4;original.masks=[LocalMask(id:"preserve",kind:.brush)]
+        original.lockedParameters=["beauty.retouchBlemishes"]
+        let result=try BeautyStyle.retouch.applying(to:original,intensity:.strong)
+        XCTAssertEqual(result.beauty.retouchBlemishes,0.15)
+        XCTAssertEqual(result.beauty.retouchDodgeBurn,1)
+        XCTAssertEqual(result.geometry,original.geometry);XCTAssertEqual(result.masks,original.masks)
+        var target=Recipe(document:original)
+        target.document.lockedParameters=["beauty.retouchDodgeBurn"]
+        let copied=try RecipeSynchronization.applying(Recipe(document:result),to:target,groups:[.beauty],targetIsRAW:false)
+        XCTAssertEqual(copied.beauty.retouchDodgeBurn,0)
+        XCTAssertEqual(copied.beauty.retouchBlemishes,0.15)
+        XCTAssertEqual(copied.document.geometry,original.geometry)
+    }
     func testEveryPresetIntensityIsValidAndRoundTripsAsOrdinaryV2Parameters() throws {
         for style in BeautyStyle.allCases {
             XCTAssertEqual(style.settings(intensity:.standard),style.settings,"Keep existing preset recipes unchanged")

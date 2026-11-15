@@ -8,9 +8,9 @@ public enum BeautyIntensity: String, CaseIterable, Sendable {
 }
 
 public enum BeautyStyle: String, CaseIterable, Sendable {
-    case natural, studio, porcelain, intensive, reshape
+    case natural, studio, retouch, porcelain, intensive, reshape
     public var title: String {
-        switch self {case .natural:return "自然";case .studio:return "精修";case .porcelain:return "瓷白";case .intensive:return "高强度";case .reshape:return "塑形"}
+        switch self {case .natural:return "自然";case .studio:return "柔肤";case .retouch:return "AI 精修";case .porcelain:return "瓷白";case .intensive:return "高强度";case .reshape:return "塑形"}
     }
     public var settings: BeautySettings {
         var b=BeautySettings();b.enabled=true
@@ -18,6 +18,11 @@ public enum BeautyStyle: String, CaseIterable, Sendable {
         case .natural: break
         case .studio:
             b.strength=0.78;b.radius=14;b.texturePreservation=0.68;b.blemishRemoval=0.6;b.skinTone=0.55;b.toneUniformity=0.55;b.skinBrightness=0.1;b.intensiveSmoothing=0.25
+        case .retouch:
+            // Local learned correction and blend layers keep the source texture.
+            // Whitening, blur and face reshaping remain independent opt-in edits.
+            b.strength=0;b.detailRecovery=0;b.blemishRemoval=0;b.skinTone=0
+            b.retouchBlemishes=0.9;b.retouchDodgeBurn=0.85
         case .porcelain:
             b.strength=0.95;b.radius=22;b.texturePreservation=0.2;b.blemishRemoval=0.8;b.skinTone=0.8;b.toneUniformity=0.85;b.skinBrightness=0.3;b.skinSaturation=0.85;b.intensiveSmoothing=0.65;b.skinWhitening=0.75;b.skinRosiness=0.06
         case .intensive, .reshape:
@@ -31,6 +36,14 @@ public enum BeautyStyle: String, CaseIterable, Sendable {
     /// per-photo batch exports do not depend on temporary inspector state.
     public func settings(intensity: BeautyIntensity) -> BeautySettings {
         var b=settings
+        if self == .retouch {
+            switch intensity {
+            case .gentle:b.retouchBlemishes=0.6;b.retouchDodgeBurn=0.55
+            case .standard:break
+            case .strong:b.retouchBlemishes=1;b.retouchDodgeBurn=1
+            }
+            return b
+        }
         switch intensity {
         case .standard: break
         case .gentle:

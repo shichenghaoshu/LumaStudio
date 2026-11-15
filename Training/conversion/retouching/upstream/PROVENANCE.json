@@ -1,0 +1,40 @@
+{
+  "license": "Apache-2.0",
+  "copyright": "Alibaba, Inc. and its affiliates",
+  "changes": [
+    "inpainting_unet.py: relative gconv import; return self from train() for the normal PyTorch API contract.",
+    "Package __init__.py placeholders added. No new training. Native preprocessing/export described in the model notice."
+  ],
+  "files": [
+    {
+      "file": "unet_deploy.py",
+      "upstreamGitBlob": "0ff75b85fe35e933a30afdf2bc42340e96af1b09",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/unet_deploy.py"
+    },
+    {
+      "file": "weights_init.py",
+      "upstreamGitBlob": "ae62d4a407b44b895209b8abdc4b833dc94cb2c2",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/weights_init.py"
+    },
+    {
+      "file": "detection_model/detection_module.py",
+      "upstreamGitBlob": "5db9c44c893b73613cde1137390b13991d7066fa",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/detection_model/detection_module.py"
+    },
+    {
+      "file": "detection_model/detection_unet_in.py",
+      "upstreamGitBlob": "c0be1a52edd06409c14a75639165ff2ec0f209bc",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/detection_model/detection_unet_in.py"
+    },
+    {
+      "file": "inpainting_model/gconv.py",
+      "upstreamGitBlob": "8b3eb2fcbd3dbe379bd5eef128d6323d1fa965bc",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/inpainting_model/gconv.py"
+    },
+    {
+      "file": "inpainting_model/inpainting_unet.py",
+      "upstreamGitBlob": "dd220dd6aaeb1d47f1e9ea59c9b31a88464a003e",
+      "upstreamURL": "https://github.com/modelscope/modelscope/blob/master/modelscope/models/cv/skin_retouching/inpainting_model/inpainting_unet.py"
+    }
+  ]
+}

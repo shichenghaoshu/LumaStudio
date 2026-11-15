@@ -160,8 +160,12 @@ public actor PhotoProcessor {
         try Task.checkCancellation()
         var image=original
         var selectedMask: CIImage?
+        if let analysis {image=try beauty.applyRetouchBase(image,settings:r.beauty,analysis:analysis,context:context)}
         if let edit=r.edit { image=RecipeAdjustments.global(image,edit.global) }
-        if let analysis { image=try beauty.apply(image,settings:r.beauty,analysis:analysis,context:context) }
+        if let analysis {
+            var remaining=r.beauty;remaining.retouchBlemishes=0;remaining.retouchDodgeBurn=0
+            image=try beauty.apply(image,settings:remaining,analysis:analysis,context:context)
+        }
         var colorSettings=r.color
         if r.edit != nil { colorSettings.exposure=0;colorSettings.contrast=1;colorSettings.saturation=1;colorSettings.temperature=6500 }
         image=try color.apply(image,settings:colorSettings,profile:profile,skinMask:analysis?.mask,context:context)
@@ -206,7 +210,8 @@ public actor PhotoProcessor {
         if tier.isPreview,let analysis,analysis.faceCount>0 { var framing=recipe.document.geometry;framing.chromaticAberration=0;framing.lensVignette=0
             let ci=ProOperators.geometry(analysis.mask,framing)
             mask=context.createCGImage(ci,from:ci.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!) } else { mask=nil }
-        let backend=recipe.beauty.enabled ? beauty.lastBackend+" · "+(analysis?.backend ?? "") : (analysis?.backend ?? "美颜未开启")
+        let learned=recipe.beauty.enabled && (recipe.beauty.retouchBlemishes>0 || recipe.beauty.retouchDodgeBurn>0) && (analysis?.faceCount ?? 0)>0
+        let backend=recipe.beauty.enabled ? (learned ? beauty.lastRetouchBackend+" · " : "")+beauty.lastBackend+" · "+(analysis?.backend ?? "") : (analysis?.backend ?? "美颜未开启")
         return RenderResult(image:cg,original:source,faceCount:analysis?.faceCount ?? 0,beautyBackend:backend,milliseconds:Date().timeIntervalSince(start)*1000,skinMask:mask,localMaskPreview:localMask.flatMap{context.createCGImage($0,from:$0.extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!)})
     }
     public func referenceProfile(url: URL,name: String) throws -> ColorProfile {
@@ -230,5 +235,5 @@ public actor PhotoProcessor {
         try FileManager.default.moveItem(at:stage,to:destination) // fails instead of overwriting, including races.
         context.clearCaches(); return destination
     }
-    public func releaseCaches() {decoder.clearCache();previewCache.removeAllObjects();skinCache.removeAllObjects();maskCache=nil;context.clearCaches()}
+    public func releaseCaches() {decoder.clearCache();previewCache.removeAllObjects();skinCache.removeAllObjects();beauty.releaseCaches();maskCache=nil;context.clearCaches()}
 }

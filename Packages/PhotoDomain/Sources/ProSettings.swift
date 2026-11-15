@@ -54,6 +54,8 @@ public struct BeautySettings: Codable, Equatable, Sendable {
     public var skinBrightness: Float = 0
     public var skinSaturation: Float = 1
     public var shadowRepair: Float = 0
+    public var retouchBlemishes: Float = 0
+    public var retouchDodgeBurn: Float = 0
     public var intensiveSmoothing: Float = 0
     public var skinWhitening: Float = 0
     public var skinRosiness: Float = 0
@@ -61,7 +63,7 @@ public struct BeautySettings: Codable, Equatable, Sendable {
     public var eyeEnlargement: Float = 0
     public var enabled: Bool = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case strength,radius,smoothing,texturePreservation,detailRecovery,sharpness,blemishRemoval,blemishThreshold,skinTone,toneUniformity,skinTemperature,skinTint,skinBrightness,skinSaturation,shadowRepair,intensiveSmoothing,skinWhitening,skinRosiness,faceSlimming,eyeEnlargement,enabled }
+    private enum CodingKeys: String, CodingKey { case strength,radius,smoothing,texturePreservation,detailRecovery,sharpness,blemishRemoval,blemishThreshold,skinTone,toneUniformity,skinTemperature,skinTint,skinBrightness,skinSaturation,shadowRepair,retouchBlemishes,retouchDodgeBurn,intensiveSmoothing,skinWhitening,skinRosiness,faceSlimming,eyeEnlargement,enabled }
     public init(from decoder: Decoder) throws {
         self.init(); let c = try decoder.container(keyedBy: CodingKeys.self)
         strength = try c.decodeIfPresent(Float.self, forKey: .strength) ?? strength
@@ -79,6 +81,8 @@ public struct BeautySettings: Codable, Equatable, Sendable {
         skinBrightness = try c.decodeIfPresent(Float.self, forKey: .skinBrightness) ?? skinBrightness
         skinSaturation = try c.decodeIfPresent(Float.self, forKey: .skinSaturation) ?? skinSaturation
         shadowRepair = try c.decodeIfPresent(Float.self, forKey: .shadowRepair) ?? shadowRepair
+        retouchBlemishes = try c.decodeIfPresent(Float.self, forKey: .retouchBlemishes) ?? retouchBlemishes
+        retouchDodgeBurn = try c.decodeIfPresent(Float.self, forKey: .retouchDodgeBurn) ?? retouchDodgeBurn
         intensiveSmoothing = try c.decodeIfPresent(Float.self, forKey: .intensiveSmoothing) ?? intensiveSmoothing
         skinWhitening = try c.decodeIfPresent(Float.self, forKey: .skinWhitening) ?? skinWhitening
         skinRosiness = try c.decodeIfPresent(Float.self, forKey: .skinRosiness) ?? skinRosiness
@@ -94,6 +98,8 @@ public struct BeautySettings: Codable, Equatable, Sendable {
         try c.encode(toneUniformity,forKey:.toneUniformity);try c.encode(skinTemperature,forKey:.skinTemperature);try c.encode(skinTint,forKey:.skinTint)
         try c.encode(skinBrightness,forKey:.skinBrightness);try c.encode(skinSaturation,forKey:.skinSaturation);try c.encode(shadowRepair,forKey:.shadowRepair)
         try c.encode(enabled,forKey:.enabled)
+        if retouchBlemishes != 0 {try c.encode(retouchBlemishes,forKey:.retouchBlemishes)}
+        if retouchDodgeBurn != 0 {try c.encode(retouchDodgeBurn,forKey:.retouchDodgeBurn)}
         if intensiveSmoothing != 0 {try c.encode(intensiveSmoothing,forKey:.intensiveSmoothing)}
         if skinWhitening != 0 {try c.encode(skinWhitening,forKey:.skinWhitening)}
         if skinRosiness != 0 {try c.encode(skinRosiness,forKey:.skinRosiness)}

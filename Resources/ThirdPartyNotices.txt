@@ -287,3 +287,11 @@ package under Tools/LibRawDecoder and Scripts/build_libraw_runtime.py.
 No warranty is provided by LibRaw or its contributors.
 The minimal fallback omits external LCMS, OpenMP and JPEG-lossy-DNG extensions;
 native Apple decoding remains primary. Source files were not modified.
+
+
+Local AI portrait retouching (0.5.4):
+Copyright (c) Alibaba, Inc. and its affiliates. Apache License 2.0.
+https://www.modelscope.cn/models/iic/cv_unet_skin-retouching/summary
+Three converted Core ML components are bundled; no new training was performed.
+Full Apache license and adaptation details: LumaStudio_BeautyEngine.bundle/RetouchModels/{LICENSE.txt,NOTICE.txt}.
+Photoshop and Retouch4me are not bundled.

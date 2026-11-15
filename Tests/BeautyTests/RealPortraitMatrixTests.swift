@@ -41,7 +41,10 @@ final class RealPortraitMatrixTests: XCTestCase {
                     if d>3 {changed+=1}
                 }
                 delta/=Double(max(1,active));light/=Double(max(1,active));redness/=Double(max(1,active))
-                XCTAssertGreaterThan(changed,style == .natural ? 0:100,"\(input.lastPathComponent) \(style.rawValue)")
+                let eligible=analysis.faces.contains{min($0.bounds.width*image.extent.width,$0.bounds.height*image.extent.height)>=100}
+                if style == .retouch && !eligible {
+                    XCTAssertEqual(after,before,"Faces below the documented 100px minimum must be skipped without changing the photo")
+                } else {XCTAssertGreaterThan(changed,style == .natural ? 0:100,"\(input.lastPathComponent) \(style.rawValue)")}
                 if style != .reshape {XCTAssertLessThanOrEqual(unmasked,1,"Known zero-mask pixels must be preserved")}
                 if style == .porcelain {XCTAssertGreaterThan(light,3,"Whitening must actually lift skin in this photograph")}
                 if style == .natural {natural=delta};if style == .intensive {intensive=delta}

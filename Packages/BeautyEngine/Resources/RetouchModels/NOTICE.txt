@@ -1,0 +1,19 @@
+LumaStudio local portrait retouching models
+
+Upstream: iic/cv_unet_skin-retouching, Alibaba, Inc. and its affiliates.
+Model page: https://www.modelscope.cn/models/iic/cv_unet_skin-retouching/summary
+Source code: https://github.com/modelscope/modelscope/tree/master/modelscope/models/cv/skin_retouching
+License: Apache License 2.0 (full text in LICENSE.txt).
+
+LumaStudio converted the published U-Net, blemish detector, and gated-convolution
+inpainting weights to Core ML ML Program with FLOAT16 compute. LumaStudio did not
+train these networks. Vision face localization and protected skin masks replace
+the upstream face detector and TensorFlow whitening stage. Local correction
+layers are upsampled and applied to original-resolution pixels; skin whitening
+and face reshaping are independent. Face crops use 1.5 times the larger face side.
+Local inference currently uses 768px detection and 576px inpainting rather than
+the upstream full-resolution overlapping 512px patch pipeline. This can miss fine
+blemishes in large crops. No Photoshop or Retouch4me proprietary code is included.
+
+Converted model hashes and pinned upstream weight URLs are recorded in
+Models/manifests/retouch-coreml-v1.json in the source distribution.

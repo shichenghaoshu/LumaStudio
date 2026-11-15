@@ -1,5 +1,7 @@
 # LumaStudio
 
+开发分支提供 **0.5.4 (21) Mac AI 精修候选**：随包离线运行局部瑕疵检测、局部修复及自适应混合层三个开放许可 Core ML 模块，新增独立的 AI 局部祛瑕／光影均肤。137 项本地 Release 测试和 5 张原尺寸批量导出通过；新界面的实际操作因 Mac 锁屏仍待验收。详情见 [候选说明](Documentation/RETOUCH_0.5.4.md)。正式下载仍为下面已发布的 0.5.3。
+
 0.5.3 (19) Mac 完成[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库已实际验证美颜、参数锁、同步与撤回、重启保存和原尺寸导出；修复了目标照片打开时撤回同步又被旧预览覆盖的问题。
 
 原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.3 (19)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
