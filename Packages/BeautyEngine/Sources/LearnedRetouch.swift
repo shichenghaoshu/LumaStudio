@@ -18,7 +18,14 @@ final class LearnedRetouch {
                 guard let url=Bundle.module.url(forResource:name,withExtension:"mlpackage",subdirectory:"RetouchModels") else {
                     throw LumaError.unsupported("本地 AI 精修模型缺失，请安装包含模型的 Mac 完整版；其他美颜仍可用。")
                 }
-                return try MLModel(contentsOf:MLModel.compileModel(at:url),configuration:configuration)
+                // Core ML clones weight files while compiling. On a protected
+                // Desktop installation that filesystem operation can stall even
+                // though ordinary reads succeed. Stage our own bundled bytes in
+                // the app's temporary directory before invoking the compiler.
+                let staging=FileManager.default.temporaryDirectory.appendingPathComponent("LumaRetouch-"+UUID().uuidString,isDirectory:true)
+                defer {try? FileManager.default.removeItem(at:staging)}
+                let local=try LearnedRetouch.stageModelPackage(at:url,in:staging)
+                return try MLModel(contentsOf:MLModel.compileModel(at:local),configuration:configuration)
             }
             detect=try load("LumaBlemishDetect");heal=try load("LumaBlemishHeal");blend=try load("LumaRetouchBlend")
         }
@@ -57,6 +64,29 @@ final class LearnedRetouch {
         }
         """) else {throw LumaError.unsupported("AI 精修混合内核编译失败")}
         self.kernel=kernel
+    }
+
+    static func stageModelPackage(at source: URL,in root: URL) throws -> URL {
+        let fm=FileManager.default
+        let destination=root.appendingPathComponent(source.lastPathComponent,isDirectory:true)
+        try fm.createDirectory(at:destination,withIntermediateDirectories:true)
+        // Relative names also avoid /var versus /private/var aliases in the
+        // system temporary directory changing a URL's path-component count.
+        guard let files=fm.enumerator(atPath:source.path) else {
+            throw LumaError.corruptData("无法读取本地 AI 精修模型")
+        }
+        for case let relative as String in files {
+            let file=source.appendingPathComponent(relative)
+            let metadata=try file.resourceValues(forKeys:[.isDirectoryKey,.isRegularFileKey,.isSymbolicLinkKey])
+            guard metadata.isSymbolicLink != true else {throw LumaError.corruptData("AI 精修模型包含无效链接")}
+            let target=destination.appendingPathComponent(relative)
+            if metadata.isDirectory == true {try fm.createDirectory(at:target,withIntermediateDirectories:true)}
+            else if metadata.isRegularFile == true {
+                // Deliberately use read/write, never copyItem/clonefile here.
+                try Data(contentsOf:file).write(to:target,options:.atomic)
+            } else {throw LumaError.corruptData("AI 精修模型包含无效文件")}
+        }
+        return destination
     }
 
     func apply(_ image: CIImage, settings: BeautySettings, analysis: SkinAnalysis, context: CIContext) throws -> CIImage {

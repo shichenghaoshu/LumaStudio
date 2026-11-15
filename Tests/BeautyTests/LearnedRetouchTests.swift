@@ -13,6 +13,21 @@ final class LearnedRetouchTests: XCTestCase {
         context.render(image,toBitmap:&p,rowBytes:w*4,bounds:image.extent,format:.RGBA8,colorSpace:space)
         return p
     }
+    func testModelStagingPreservesNestedWeightsAndRejectsLinks() throws {
+        let fm=FileManager.default,root=fm.temporaryDirectory.appendingPathComponent("RetouchStagingTest-"+UUID().uuidString)
+        defer {try? fm.removeItem(at:root)}
+        let package=root.appendingPathComponent("Source/Test.mlpackage"),weights=package.appendingPathComponent("Data/com.apple.CoreML/weights")
+        try fm.createDirectory(at:weights,withIntermediateDirectories:true)
+        let bytes=Data((0..<4096).map{UInt8($0%251)})
+        try bytes.write(to:weights.appendingPathComponent("weight.bin"))
+        try Data("manifest".utf8).write(to:package.appendingPathComponent("Manifest.json"))
+        let staged=try LearnedRetouch.stageModelPackage(at:package,in:root.appendingPathComponent("Staged"))
+        XCTAssertEqual(try Data(contentsOf:staged.appendingPathComponent("Data/com.apple.CoreML/weights/weight.bin")),bytes)
+        XCTAssertEqual(try Data(contentsOf:staged.appendingPathComponent("Manifest.json")),Data("manifest".utf8))
+        try fm.createSymbolicLink(at:package.appendingPathComponent("unexpected-link"),withDestinationURL:weights.appendingPathComponent("weight.bin"))
+        XCTAssertThrowsError(try LearnedRetouch.stageModelPackage(at:package,in:root.appendingPathComponent("Rejected")))
+        XCTAssertEqual(try Data(contentsOf:weights.appendingPathComponent("weight.bin")),bytes)
+    }
     func testBundledModelsRunLocallyPreserveMaskAndReusePredictions() throws {
         let rect=CGRect(x:0,y:0,width:256,height:256)
         let flat=CIImage(color:CIColor(red:0.54,green:0.36,blue:0.26)).cropped(to:rect)
