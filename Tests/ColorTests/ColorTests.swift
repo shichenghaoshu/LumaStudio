@@ -69,3 +69,21 @@ extension ColorTests {
         XCTAssertGreaterThan(da,5);XCTAssertLessThan(db,da*0.35)
     }
 }
+extension ColorTests {
+    func testReferenceMatchingMovesKnownSourceTowardIndependentWarmAndCoolTargets() throws {
+        let context=CIContext(),processor=try ColorProcessor(),extent=CGRect(x:0,y:0,width:64,height:64)
+        let source=CIImage(color:CIColor(red:0.45,green:0.45,blue:0.45)).cropped(to:extent)
+        func mean(_ image:CIImage)->[Double] {var b=[UInt8](repeating:0,count:64*64*4);context.render(image,toBitmap:&b,rowBytes:256,bounds:extent,format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB)!);return (0..<3).map{Double(b[$0])/255}}
+        func distance(_ a:[Double],_ b:[Double])->Double {sqrt(zip(a,b).reduce(0){$0+pow($1.0-$1.1,2)})}
+        var reports=[[String:Any]]()
+        for (id,color) in [("warm",CIColor(red:0.6,green:0.45,blue:0.3)),("cool",CIColor(red:0.3,green:0.45,blue:0.6))] {
+            let target=CIImage(color:color).cropped(to:extent),profile=ColorProfile(name:id,reference:try processor.analyze(target,context:context))
+            var settings=ColorSettings();settings.presetID=nil;settings.intensity=1
+            let result=try processor.apply(source,settings:settings,profile:profile,skinMask:nil,context:context)
+            let before=distance(mean(source),mean(target)),after=distance(mean(result),mean(target))
+            XCTAssertLessThan(after,before,id)
+            reports.append(["target":id,"beforeRGBDistance":before,"afterRGBDistance":after,"passed":after<before])
+        }
+        if let path=ProcessInfo.processInfo.environment["LUMA_AUDIT_OUTPUT"] {try JSONSerialization.data(withJSONObject:["scope":"Bounded statistical color transfer on known warm/cool targets; not semantic style understanding","checks":reports],options:[.prettyPrinted,.sortedKeys]).write(to:URL(fileURLWithPath:path).appendingPathComponent("reference-contracts.json"))}
+    }
+}

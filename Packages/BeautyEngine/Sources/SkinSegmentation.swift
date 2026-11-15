@@ -9,8 +9,11 @@ public struct SkinAnalysis {
     public let faceCount: Int
     public let backend: String
     public let faces: [FaceFeatures]
-    public init(mask: CIImage,faceCount: Int,backend: String,faces: [FaceFeatures]=[]) {
-        self.mask=mask;self.faceCount=faceCount;self.backend=backend;self.faces=faces
+    /// Pixel coordinates containing all nonzero skin support. Nil keeps the full
+    /// frame for externally supplied masks; this never replaces the actual mask.
+    public let processingBounds: CGRect?
+    public init(mask: CIImage,faceCount: Int,backend: String,faces: [FaceFeatures]=[],processingBounds:CGRect?=nil) {
+        self.mask=mask;self.faceCount=faceCount;self.backend=backend;self.faces=faces;self.processingBounds=processingBounds
     }
 }
 public struct FaceFeatures {
@@ -48,9 +51,12 @@ public final class SkinSegmentation {
         #endif
         try VNImageRequestHandler(cgImage:cg,options:[:]).perform([request])
         let faces=request.results ?? []; let w=cg.width,h=cg.height
+        guard !faces.isEmpty else {
+            return SkinAnalysis(mask:CIImage(color:.black).cropped(to:extent),faceCount:0,backend:modelStatus)
+        }
         var pixels=[UInt8](repeating:0,count:w*h*4)
         context.render(small,toBitmap:&pixels,rowBytes:w*4,bounds:CGRect(x:0,y:0,width:w,height:h),format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB))
-        var mask=[Float](repeating:0,count:w*h), guide=mask
+        var mask=[Float](repeating:0,count:w*h), guide=mask,support=mask
         struct FaceGeometry { let rect: CGRect; let excluded: [CGRect]; let cb: Float; let cr: Float }
         let geometry=faces.map { face -> FaceGeometry in
             let rect=face.boundingBox
@@ -65,10 +71,16 @@ public final class SkinSegmentation {
             var cbs=[Float](),crs=[Float]()
             for fx in [0.28,0.72] { for fy in [0.36,0.46] {
                 let x=min(w-1,max(0,Int((rect.minX+rect.width*fx)*CGFloat(w)))),y=min(h-1,max(0,Int((1-rect.minY-rect.height*fy)*CGFloat(h))))
-                let i=(y*w+x)*4, r=Float(pixels[i])/255,g=Float(pixels[i+1])/255,b=Float(pixels[i+2])/255
-                cbs.append(-0.168736*r-0.331264*g+0.5*b); crs.append(0.5*r-0.418688*g-0.081312*b)
+                // A small median patch is less sensitive to one pore, highlight,
+                // compression block or stray landmark than a single pixel.
+                for py in max(0,y-1)...min(h-1,y+1) {for px in max(0,x-1)...min(w-1,x+1) {
+                    let j=(py*w+px)*4,r=Float(pixels[j])/255,g=Float(pixels[j+1])/255,b=Float(pixels[j+2])/255
+                    let l=0.2126*r+0.7152*g+0.0722*b
+                    if l>0.04,l<0.96 {cbs.append(-0.168736*r-0.331264*g+0.5*b);crs.append(0.5*r-0.418688*g-0.081312*b)}
+                }}
             } }
-            return FaceGeometry(rect:rect,excluded:excluded,cb:cbs.reduce(0,+)/4,cr:crs.reduce(0,+)/4)
+            func median(_ values:[Float])->Float {let sorted=values.sorted();return sorted.isEmpty ? 0 : sorted[sorted.count/2]}
+            return FaceGeometry(rect:rect,excluded:excluded,cb:median(cbs),cr:median(crs))
         }
         for y in 0..<h { for x in 0..<w {
             let i=y*w+x,j=i*4,r=Float(pixels[j])/255,g=Float(pixels[j+1])/255,b=Float(pixels[j+2])/255
@@ -79,8 +91,9 @@ public final class SkinSegmentation {
                 let box=face.rect
                 let nx=(point.x-box.midX)/(box.width*0.49), ny=(point.y-(box.midY+box.height*0.03))/(box.height*0.61)
                 let ellipse=nx*nx+ny*ny
-                let neck=point.y<box.minY+box.height*0.08 && point.y>box.minY-box.height*0.28 && abs(point.x-box.midX)<box.width*0.28
-                guard (ellipse<1 || neck),l>0.025,l<0.985 else { continue }
+                let neckX=(point.x-box.midX)/(box.width*0.28),neckY=(point.y-box.minY+box.height*0.06)/(box.height*0.22)
+                let neckEllipse=neckX*neckX+neckY*neckY
+                guard ellipse<1 || neckEllipse<1 else { continue }
                 func smooth(_ value: CGFloat)->Float {let t=min(1,max(0,Float(value)));return t*t*(3-2*t)}
                 var protected: Float=1
                 for feature in face.excluded {
@@ -91,10 +104,14 @@ public final class SkinSegmentation {
                 guard protected>0 else {continue}
                 let cb = -0.168736*r-0.331264*g+0.5*b, cr=0.5*r-0.418688*g-0.081312*b
                 let chroma=exp(-pow((cb-face.cb)/0.11,2)-pow((cr-face.cr)/0.13,2))
-                let warm: Float = r>b*0.82 && cr > -0.025 ? 1 : 0.15
+                // Continuous cues avoid a hard 1 -> .15 jump at the color test.
+                let warm=0.15+0.85*smooth(CGFloat((r-b*0.82+0.015)/0.06))*smooth(CGFloat((cr+0.045)/0.04))
+                let light=smooth(CGFloat((l-0.02)/0.04))*(1-smooth(CGFloat((l-0.94)/0.055)))
                 let faceFeather=smooth((1-ellipse)*6)
-                let neckFeather=neck ? 0.5*smooth((1-abs(point.x-box.midX)/(box.width*0.28))*3)*smooth((point.y-box.minY+box.height*0.28)/(box.height*0.12)) : 0
-                mask[i]=max(mask[i],chroma*warm*max(faceFeather,neckFeather)*protected)
+                let neckFeather=0.5*smooth((1-neckEllipse)*3)
+                let allowed=max(faceFeather,neckFeather)*protected
+                support[i]=max(support[i],allowed)
+                mask[i]=max(mask[i],chroma*warm*light*allowed)
             }
         } }
         var backend=modelStatus
@@ -111,10 +128,11 @@ public final class SkinSegmentation {
                 for i in mask.indices { mask[i] *= min(1,max(0,probabilities[i])) }
             } catch { backend="模型推理失败 · 传统分割"; LumaLog.pipeline.error("皮肤模型推理失败，使用传统算法") }
         }
-        let refined=try GuidedFilter.apply(guide:guide,input:mask,width:w,height:h,radius:3)
-        // Reapply exclusion after guided filtering so eyes/lips remain exactly protected.
-        let bytes=refined.indices.map { UInt8(min(255,max(0,mask[$0] == 0 ? 0 : refined[$0]*255))) }
-        let maskImage=CIImage(bitmapData:Data(bytes),bytesPerRow:w,size:CGSize(width:w,height:h),format:.L8,colorSpace:nil)
+        let refined=try SkinMaskRefinement.apply(guide:guide,probability:mask,support:support,width:w,height:h)
+        // Retain the continuous probability through enlargement. Geometry and
+        // feature support cap the refinement, without reintroducing color cuts.
+        let data=refined.withUnsafeBytes {Data($0)}
+        let maskImage=CIImage(bitmapData:data,bytesPerRow:w*MemoryLayout<Float>.stride,size:CGSize(width:w,height:h),format:.Lf,colorSpace:nil)
             .transformed(by:CGAffineTransform(scaleX:extent.width/CGFloat(w),y:extent.height/CGFloat(h))).cropped(to:extent)
         let features=faces.map { face -> FaceFeatures in
             func center(_ region: VNFaceLandmarkRegion2D?) -> CGPoint? {
@@ -125,6 +143,20 @@ public final class SkinSegmentation {
             }
             return FaceFeatures(bounds:face.boundingBox,leftEye:center(face.landmarks?.leftEye),rightEye:center(face.landmarks?.rightEye))
         }
-        return SkinAnalysis(mask:maskImage,faceCount:faces.count,backend:backend,faces:features)
+        let skinBounds=geometry.map {g -> CGRect in
+            let b=g.rect
+            return CGRect(x:extent.minX+(b.midX-b.width*0.49)*extent.width,
+                          y:extent.minY+(b.minY-b.height*0.28)*extent.height,
+                          width:b.width*0.98*extent.width,height:b.height*1.42*extent.height)
+        }.reduce(CGRect.null){$0.union($1)}.intersection(extent)
+        return SkinAnalysis(mask:maskImage,faceCount:faces.count,backend:backend,faces:features,processingBounds:skinBounds.isNull ? nil:skinBounds)
+    }
+}
+
+enum SkinMaskRefinement {
+    static func apply(guide:[Float],probability:[Float],support:[Float],width:Int,height:Int)throws->[Float] {
+        guard support.count==probability.count else {throw LumaError.corruptData("皮肤保护区域尺寸")}
+        let filtered=try GuidedFilter.apply(guide:guide,input:probability,width:width,height:height,radius:3)
+        return filtered.indices.map {min(max(0,support[$0]),filtered[$0])}
     }
 }

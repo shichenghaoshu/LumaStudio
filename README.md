@@ -1,8 +1,14 @@
 # LumaStudio
 
-原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.1 (15)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。本轮新增 Android / Windows 客户端，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+0.5.3 (19) Mac 完成[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库已实际验证美颜、参数锁、同步与撤回、重启保存和原尺寸导出；修复了目标照片打开时撤回同步又被旧预览覆盖的问题。
 
-[下载 Mac 0.5.1](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.1) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.1 使用说明与验证](Documentation/RELEASE_0.5.1.md)
+原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.3 (19)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+
+[下载 Mac 0.5.3](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.3 使用说明与验证](Documentation/RELEASE_0.5.3.md)
+
+**0.5.2 历史算法验收**保留120项Release检查、184参数逐项证据和真实DeepSeek执行。详见[实际算法验收范围](Documentation/ALGORITHM_ACCEPTANCE.md)；旧记录的时间与版本边界保留，不视为本轮新的在线调用。
+
+**0.5.3 美颜优化**提供保边强效磨皮、连续皮肤蒙版、按人脸区域处理，以及轻柔／标准／更强三档预设力度、一键强效和美颜专用同步入口。预设保留已锁定的参数，仍保存为普通 EditRecipe v2 配方。132项本机Release检查、12张独立照片及最终原生操作的证据范围见[美颜优化](Documentation/BEAUTY_OPTIMIZATION.md)。
 
 [Mac 0.5.1 性能更新](Documentation/RELEASE_0.5.1.md)提供交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），已完成独立测试图库中的原生界面、重启、紧凑布局与全尺寸美颜导出验收；原图库原片、配方与选片标记核对一致。
 
@@ -79,6 +85,6 @@ LUMA_PORTRAIT_FIXTURE="$PWD/work/fixtures/portrait.jpg" swift test
 
 ## 验证与未完成项
 
-当前 Mac 收束记录见 [0.5.1 验证与交付](Documentation/RELEASE_0.5.1.md)。Windows / Android 及上一版记录见 [0.5.0 验证与交付](Documentation/RELEASE_0.5.0.md)。[0.4.2 验证与交付](Documentation/RELEASE_0.4.2.md)、[早期验收记录](Documentation/VALIDATION.md)、[早期性能报告](Documentation/PERFORMANCE.md) 与 [历史逐项状态](Documentation/STATUS.md) 保留为历史阶段证据。原始日志和输出位于 `Artifacts`，公开验证包只选择审查后的记录与公开素材截图。
+当前 Mac 收束记录见 [0.5.3 验证与交付](Documentation/RELEASE_0.5.3.md)。[0.5.1](Documentation/RELEASE_0.5.1.md)、Windows / Android 的 [0.5.0](Documentation/RELEASE_0.5.0.md)、[0.4.2](Documentation/RELEASE_0.4.2.md)、[早期验收记录](Documentation/VALIDATION.md)、[早期性能报告](Documentation/PERFORMANCE.md) 与 [历史逐项状态](Documentation/STATUS.md) 保留为历史阶段证据。原始日志和输出位于 `Artifacts`，公开验证包只选择审查后的记录与公开素材截图。
 
 G9 实机、M1 真机、M 系列实体 iPad、跨实体设备传输、100 张不同场景的连续运行、专业人像主观质量评审仍需完成。该版本没有 G9 内嵌实时取景、拍摄参数调节、G9 直接 Wi-Fi 控制、任意液化、完整五官/身体重塑或自动内容填补；这些入口明确禁用或未开放。

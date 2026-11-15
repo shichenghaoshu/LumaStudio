@@ -101,7 +101,7 @@ struct MacEditWorkspace: View {
                 Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.help("Agent 处理过程").accessibilityLabel("打开处理过程")
             }.buttonStyle(.plain).font(.system(size:14)).foregroundStyle(.secondary)
             HStack(spacing:0) {
-                Button("导出"){model.exportToLibrary()}.buttonStyle(.plain).padding(.leading,19).padding(.trailing,12).accessibilityLabel("导出当前照片")
+                Button("导出"){model.exportToLibrary()}.buttonStyle(.plain).padding(.leading,19).padding(.trailing,12).accessibilityLabel("导出当前照片").keyboardShortcut("e",modifiers:.command).help("导出当前照片 ⌘E")
                 Menu{Button("选择输出文件夹…"){model.choose(.exportSingle)};Button("导出设置…"){show(.output)}}label:{Image(systemName:"chevron.down").padding(.trailing,10)}.menuStyle(.borderlessButton).fixedSize().accessibilityLabel("更多导出选项")
             }.font(.system(size:12,weight:.semibold)).foregroundStyle(.black).frame(height:31).background(studioAccent,in:RoundedRectangle(cornerRadius:6)).disabled(model.selected==nil || model.rendering || model.agentBusy)
         }.padding(.horizontal,16).frame(height:58).background(Color(white:0.08))
@@ -136,12 +136,18 @@ struct MacEditWorkspace: View {
     private func show(_ value: WorkspaceInspectorTab) {tab=value;fineEditing=true;if value != .masks{model.drawingBrush=false;model.showMaskOverlay=false}}
     private var previewStatus: some View {
         HStack(spacing:8) {
+            HStack(spacing:4) {
+                Button{model.navigatePhoto(-1)}label:{Image(systemName:"chevron.left").frame(width:22,height:23)}
+                    .disabled(!model.canNavigatePhotos || model.adjacentPhoto(-1)==nil).keyboardShortcut(.leftArrow,modifiers:.option).accessibilityLabel("上一张照片").help("上一张 ⌥←")
+                Button{model.navigatePhoto(1)}label:{Image(systemName:"chevron.right").frame(width:22,height:23)}
+                    .disabled(!model.canNavigatePhotos || model.adjacentPhoto(1)==nil).keyboardShortcut(.rightArrow,modifiers:.option).accessibilityLabel("下一张照片").help("下一张 ⌥→")
+            }.foregroundStyle(.secondary)
             if model.rendering{ProgressView().controlSize(.mini)}
             Text(model.selected?.name ?? "尚未选择照片").font(.system(size:10)).lineLimit(1).foregroundStyle(.secondary)
             if model.selected?.isRAW==true{Text("RAW").font(.system(size:8,weight:.semibold)).foregroundStyle(studioAccent)}
             Spacer(minLength:5)
             Button{comparing.toggle();model.showingOriginal=false}label:{Label("前后对比",systemImage:"rectangle.lefthalf.inset.filled")}.foregroundStyle(comparing ? studioAccent : .secondary).accessibilityLabel("前后对比")
-            Button(model.showingOriginal ? "返回效果" : "查看原图"){model.showingOriginal.toggle();comparing=false}.foregroundStyle(.secondary)
+            Button(model.showingOriginal ? "返回效果" : "查看原图"){model.showingOriginal.toggle();comparing=false}.foregroundStyle(.secondary).keyboardShortcut("\\",modifiers:.command).help("原图／效果 ⌘\\")
             Button{photoInfoPresented.toggle()}label:{Image(systemName:"info.circle")}.accessibilityLabel("照片与处理信息").popover(isPresented:$photoInfoPresented){VStack(alignment:.leading,spacing:10){Text(model.selected?.name ?? "").font(.headline);if let image=model.preview{Text("预览：\(image.width) × \(image.height)")};Text(model.renderStatus);Text("导出时按原片重新处理。").foregroundStyle(.secondary)}.font(.caption).padding(20).frame(width:300)}
         }.buttonStyle(.plain).font(.system(size:10)).padding(.horizontal,14).frame(height:31).background(Color(white:0.055))
     }
@@ -156,7 +162,14 @@ struct MacEditWorkspace: View {
     }
     private var inspector: some View {
         VStack(spacing:0){
-            HStack{Label(tab.rawValue=="调色" ? "色彩调节" : tab.rawValue,systemImage:tab.symbol).font(.system(size:12,weight:.medium));Spacer();if tab == .color{Text("\(ParameterCatalog.all.count) 项参数").font(.system(size:9)).foregroundStyle(.tertiary)}}.padding(.horizontal,16).frame(height:42)
+            HStack {
+                Label(tab.rawValue=="调色" ? "色彩调节" : tab.rawValue,systemImage:tab.symbol).font(.system(size:12,weight:.medium))
+                Spacer()
+                Button {model.applyBeautyStyle(.intensive,intensity:.strong);show(.portrait)} label:{Label("强效美颜",systemImage:"sparkles")}
+                    .font(.system(size:11,weight:.medium)).buttonStyle(.plain).foregroundStyle(studioAccent)
+                    .keyboardShortcut("b",modifiers:[.command,.shift]).help("一键强效美颜 ⇧⌘B").accessibilityLabel("一键强效美颜")
+                    .disabled(model.preview==nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
+            }.padding(.horizontal,16).frame(height:42)
             ScrollView{
                 VStack(alignment:.leading,spacing:0){
                     switch tab{
@@ -172,7 +185,7 @@ struct MacEditWorkspace: View {
                     }
                 }.padding(.horizontal,12).padding(.bottom,16).disabled(model.selected==nil || (model.agentBusy && tab != .assistant))
             }.id(tab)
-            HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.recipeSyncPresented=true}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
+            HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.presentRecipeSynchronization()}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
         }.background(Color(white:0.095))
     }
     private var recipeInspector: some View {
@@ -195,7 +208,7 @@ struct MacEditWorkspace: View {
             }
             InspectorSection("应用到同组照片") {
                 Text("按分组同步到所选照片，保留各自的裁剪、局部区域与已锁定参数。").font(.caption).foregroundStyle(.secondary)
-                Button{model.recipeSyncPresented=true}label:{Label("选择照片并同步…",systemImage:"arrow.triangle.2.circlepath")}.font(.caption).disabled(!model.canSynchronize)
+                Button{model.presentRecipeSynchronization()}label:{Label("选择照片并同步…",systemImage:"arrow.triangle.2.circlepath")}.font(.caption).disabled(!model.canSynchronize)
                 Button{openBatch()}label:{Label("前往批量导出…",systemImage:"square.grid.2x2")}.font(.caption)
                 if !model.workflowStatus.isEmpty {Text(model.workflowStatus).font(.caption).foregroundStyle(studioAccent)}
                 if model.lastRecipeSync != nil {Button("撤回上次同步"){model.undoRecipeSynchronization()}.font(.caption).disabled(!model.canSynchronize)}
@@ -387,7 +400,7 @@ private struct MacWorkspaceFilmstrip: View {
                 TextField("查找照片",text:$model.photoFilter.query).textFieldStyle(.plain).font(.system(size:10)).padding(.horizontal,8).padding(.vertical,4).background(Color.white.opacity(0.04),in:RoundedRectangle(cornerRadius:4)).frame(width:100).accessibilityLabel("查找照片")
                 PhotoFilterMenu(model:model).font(.system(size:10)).fixedSize()
                 PhotoReviewMenu(model:model,ids:Set([model.selectedID].compactMap{$0})).font(.system(size:10)).fixedSize()
-                Button("同步…"){model.recipeSyncPresented=true}.font(.system(size:10)).disabled(!model.canSynchronize)
+                Button("同步…"){model.presentRecipeSynchronization()}.font(.system(size:10)).disabled(!model.canSynchronize)
                 Button {
                     if model.selection.isEmpty {model.selection=Set(photos.map(\.id))};model.page = .batch
                 } label:{Label("批量…",systemImage:"square.grid.2x2").font(.system(size:10))}.buttonStyle(.borderless).disabled(photos.isEmpty)
