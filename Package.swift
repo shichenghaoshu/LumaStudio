@@ -26,7 +26,7 @@ let package = Package(
         .target(name: "CameraKit", dependencies: ["PhotoDomain"], path: "Packages/CameraKit/Sources"),
         .target(name: "TetherFolderWatcher", dependencies: ["PhotoDomain"], path: "Packages/TetherFolderWatcher/Sources"),
         .target(name: "PanasonicG9", dependencies: ["PhotoDomain", "CameraKit", "TetherFolderWatcher"], path: "Packages/PanasonicG9/Sources"),
-        .target(name: "BeautyEngine", dependencies: ["PhotoDomain", .product(name: "MetalPetal", package: "MetalPetal", condition: .when(platforms: [.macOS]))], path: "Packages/BeautyEngine/Sources"),
+        .target(name: "BeautyEngine", dependencies: ["PhotoDomain", .product(name: "MetalPetal", package: "MetalPetal", condition: .when(platforms: [.macOS]))], path: "Packages/BeautyEngine", sources: ["Sources"], resources: [.copy("Resources/RetouchModels")]),
         .target(name: "CloudModel", dependencies: ["PhotoDomain", "AgentCore", "ToolRegistry"], path: "Packages/CloudModel/Sources"),
         .target(name: "VoiceBridge", dependencies: ["PhotoDomain", .product(name: "DequeModule", package: "swift-collections")], path: "Packages/VoiceBridge/Sources"),
         .target(name: "ColorEngine", dependencies: ["PhotoDomain"], path: "Packages/ColorEngine/Sources", resources: [.process("LUTs")]),

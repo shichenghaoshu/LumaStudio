@@ -32,6 +32,8 @@ extension ParameterCatalog {
         .scalar("beauty.skinBrightness", "皮肤亮度", .portrait, \.beauty.skinBrightness, -1...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: ""),
         .scalar("beauty.skinSaturation", "皮肤饱和度", .portrait, \.beauty.skinSaturation, 0...2, defaultValue: 1, step: 0.01, scale: 100, offset: -100, unit: ""),
         .scalar("beauty.shadowRepair", "皮肤暗部修复", .portrait, \.beauty.shadowRepair, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),
+        .scalar("beauty.retouchBlemishes", "AI 局部祛瑕", .portrait, \.beauty.retouchBlemishes, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),
+        .scalar("beauty.retouchDodgeBurn", "AI 光影均肤", .portrait, \.beauty.retouchDodgeBurn, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),
         .scalar("beauty.intensiveSmoothing", "强效磨皮", .portrait, \.beauty.intensiveSmoothing, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),
         .scalar("beauty.skinWhitening", "瓷白美白", .portrait, \.beauty.skinWhitening, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),
         .scalar("beauty.skinRosiness", "红润肤色", .portrait, \.beauty.skinRosiness, 0...1, defaultValue: 0, step: 0.01, scale: 100, offset: 0, unit: "%"),

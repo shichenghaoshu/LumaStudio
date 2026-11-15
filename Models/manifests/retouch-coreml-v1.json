@@ -1,0 +1,85 @@
+{
+  "id": "luma-retouch-coreml-v1",
+  "license": "Apache-2.0",
+  "sourceModel": "iic/cv_unet_skin-retouching",
+  "modelSource": "https://www.modelscope.cn/models/iic/cv_unet_skin-retouching/summary",
+  "upstreamCode": "https://github.com/modelscope/modelscope/tree/master/modelscope/models/cv/skin_retouching",
+  "conversion": {
+    "torch": "2.8.0",
+    "coremltools": "8.3.0",
+    "precision": "FLOAT16",
+    "format": "ML Program",
+    "trainingPerformed": false
+  },
+  "upstreamWeights": [
+    {
+      "bytes": 227618450,
+      "sha256": "c9e1388b19d9334c90db08308c86de208f535920ee381ae8a9cb63484a78351a",
+      "source": "https://www.modelscope.cn/api/v1/models/iic/cv_unet_skin-retouching/repo?Revision=b84ee0341a26f9cf440a47ba38133ed181fd51b1&FilePath=joint_20210926.pth",
+      "filename": "joint_20210926.pth"
+    },
+    {
+      "bytes": 53646276,
+      "sha256": "760d0c0b95c4e0a692165677fe2b82dbdf8fbbd4a3780ca966599c627b082993",
+      "source": "https://www.modelscope.cn/api/v1/models/iic/cv_unet_skin-retouching/repo?Revision=72b82f86fb9720b0e2adf05be0a0ea47cc6f329d&FilePath=pytorch_model.pt",
+      "filename": "pytorch_model.pt"
+    }
+  ],
+  "assets": [
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LICENSE.txt",
+      "bytes": 11359,
+      "sha256": "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishDetect.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+      "bytes": 23864,
+      "sha256": "699e048b033d51f9dcf5fba5147966b827e93732175ac7397ceae7b68df3dcc4"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishDetect.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+      "bytes": 36064838,
+      "sha256": "35709737609157f446d9a105e443f6593721c045468be0e0e23a217280725038"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishDetect.mlpackage/Manifest.json",
+      "bytes": 617,
+      "sha256": "ee5e8c0f1af2793c7ff8ee8355f0387473abd223da9e7e68b3fa29ab321dee57"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishHeal.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+      "bytes": 43056,
+      "sha256": "b3c2c1338fcba46d5c3f6c6173afc4cd70919795e951e14db0356e25cefc10a5"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishHeal.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+      "bytes": 72131608,
+      "sha256": "3fcc43a5e37c3264aa5e2846c99fc8bb370aaa162ed60ae12caff806f108e4b5"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaBlemishHeal.mlpackage/Manifest.json",
+      "bytes": 617,
+      "sha256": "53d7dba5c1d1870b659dd0e7a5a9ee3bb54b408e68e9baf674e31203931e6aee"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaRetouchBlend.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+      "bytes": 35850,
+      "sha256": "b51f6f15b40d668ed0162db2acafdda9152721c1cc8addd8f6f12248299b2b80"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaRetouchBlend.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+      "bytes": 26777472,
+      "sha256": "44e44b702304c57199cd6d32d137f02fe9c92d4036ad284430c2aedcadd0aa72"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/LumaRetouchBlend.mlpackage/Manifest.json",
+      "bytes": 617,
+      "sha256": "0da8168e0533fe7aeca1af07279a4f122c13c8999c7e0a7ca86684491ce75af4"
+    },
+    {
+      "path": "Packages/BeautyEngine/Resources/RetouchModels/NOTICE.txt",
+      "bytes": 1226,
+      "sha256": "5bed76e7697fd5b4745aef979daadd58d36e89ca3dc1920d9f8518758021f801"
+    }
+  ]
+}

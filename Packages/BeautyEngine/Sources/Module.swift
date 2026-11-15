@@ -13,13 +13,18 @@ public final class BeautyProcessor {
     private let structureKernel: CIColorKernel
     private let shape: FaceShapeProcessor
     private let metalBeauty=MetalPetalBeauty()
+    private let retouch: LearnedRetouch
     private let useMetalPetal: Bool
     public private(set) var lastBackend="美颜未开启"
+    public private(set) var lastRetouchBackend=""
     public var metalPetalAvailable: Bool { metalBeauty.available }
+    public var retouchInferenceCount: Int {retouch.inferenceCount}
+    public var retouchMilliseconds: Double {retouch.lastMilliseconds}
     public init(modelURL: URL? = nil,useMetalPetal: Bool = true) throws {
         self.useMetalPetal=useMetalPetal
         segmentation=SkinSegmentation(modelURL:modelURL)
         shape=try FaceShapeProcessor()
+        retouch=try LearnedRetouch()
         guard let texture=CIColorKernel(source:"""
         kernel vec4 lumaTexture(__sample original, __sample low, __sample smoothLow, float strength, float repair, float preservation, float recovery, float threshold) {
             vec3 detail = original.rgb - low.rgb;
@@ -89,8 +94,14 @@ public final class BeautyProcessor {
         """) else { throw LumaError.unsupported("Core Image 纹理内核编译失败") }
         textureKernel=texture;toneKernel=tone;detailKernel=detail;intensiveKernel=intensive;momentKernel=moment;structureKernel=structure
     }
-    public func apply(_ image: CIImage, settings: BeautySettings, analysis: SkinAnalysis,context: CIContext?=nil) throws -> CIImage {
-        guard settings.enabled,analysis.faceCount>0 else { lastBackend=analysis.faceCount>0 ? "美颜未开启" : "未检测到人脸，未执行美颜";return image }
+    public func apply(_ source: CIImage, settings: BeautySettings, analysis: SkinAnalysis,context: CIContext?=nil) throws -> CIImage {
+        guard settings.enabled,analysis.faceCount>0 else { lastBackend=analysis.faceCount>0 ? "美颜未开启" : "未检测到人脸，未执行美颜";return source }
+        let learned=settings.retouchBlemishes>0 || settings.retouchDodgeBurn>0
+        let image: CIImage
+        if learned {
+            guard let context else {throw LumaError.unsupported("AI 精修需要渲染上下文")}
+            image=try applyRetouchBase(source,settings:settings,analysis:analysis,context:context)
+        } else {image=source}
         let scale=max(image.extent.width,image.extent.height)/1600
         let low=image.clampedToExtent().applyingFilter("CIGaussianBlur",parameters:[kCIInputRadiusKey:max(0.4,CGFloat(settings.radius)*0.275*scale)]).cropped(to:image.extent)
         let smoothing=settings.strength*settings.smoothing
@@ -144,7 +155,18 @@ public final class BeautyProcessor {
         }
         if settings.sharpness>0 {toned=toned.applyingFilter("CISharpenLuminance",parameters:[kCIInputSharpnessKey:settings.sharpness*0.5])}
         let result=toned.applyingFilter("CIBlendWithMask",parameters:[kCIInputBackgroundImageKey:image,kCIInputMaskImageKey:analysis.mask]).cropped(to:image.extent)
+        if learned {lastBackend=lastRetouchBackend+" · "+lastBackend}
         if settings.faceSlimming>0 || settings.eyeEnlargement>0 {lastBackend += " + Vision 人脸塑形"}
         return try shape.apply(result,settings:settings,faces:analysis.faces)
+    }
+    public func releaseCaches() {retouch.clearCache()}
+    /// Repair is evaluated before global grading. Source predictions are reused
+    /// when exposure/white balance changes, so slider frames never rerun the net.
+    public func applyRetouchBase(_ image: CIImage,settings: BeautySettings,analysis: SkinAnalysis,context: CIContext) throws -> CIImage {
+        lastRetouchBackend=""
+        guard settings.enabled,analysis.faceCount>0,settings.retouchBlemishes>0 || settings.retouchDodgeBurn>0 else {return image}
+        let result=try retouch.apply(image,settings:settings,analysis:analysis,context:context)
+        lastRetouchBackend="本地 Core ML AI 精修（\(retouch.lastFaceCount) 张≥100px人脸）"
+        return result
     }
 }

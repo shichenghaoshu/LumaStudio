@@ -954,6 +954,18 @@
           "maximum": 1,
           "default": 0
         },
+        "retouchBlemishes": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "retouchDodgeBurn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
         "enabled": {
           "type": "boolean"
         },

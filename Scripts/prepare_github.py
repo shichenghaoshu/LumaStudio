@@ -2,6 +2,8 @@
 """Audit/stage only deliverable source; never add private local research or credentials."""
 import argparse
 import re
+import json
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -14,6 +16,13 @@ def git(*args, **kwargs):
     return subprocess.run(["git", *args], cwd=ROOT, check=True, **kwargs)
 
 def audit():
+    manifest=ROOT / "Models/manifests/retouch-coreml-v1.json"
+    if manifest.exists():
+        declared=json.loads(manifest.read_text())["assets"]
+        for asset in declared:
+            file=ROOT / asset["path"]
+            if file.stat().st_size != asset["bytes"] or hashlib.sha256(file.read_bytes()).hexdigest() != asset["sha256"]:
+                raise RuntimeError("Bundled retouch resource differs from its reviewed manifest: " + asset["path"])
     # Respect each platform's generated build/cache exclusions. Walking Apps
     # recursively would include SDK symlinks and compiled Flutter engines.
     if (ROOT / ".git").exists():
@@ -45,7 +54,7 @@ def audit():
                 raise RuntimeError("Potential credential; review before upload: " + relative)
         count += 1
         size += length
-    print(f"Source whitelist audit passed: {count} files, {size} bytes. No photo/research/model-weight directories selected.")
+    print(f"Source whitelist audit passed: {count} files, {size} bytes. Private photo/research/GGUF folders excluded; licensed Core ML resources verified when present.")
 
 def main():
     parser = argparse.ArgumentParser()

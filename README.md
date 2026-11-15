@@ -1,10 +1,12 @@
 # LumaStudio
 
+**0.5.4 (22) Mac AI 精修**随包离线运行局部瑕疵检测、局部修复及自适应混合层三个开放许可 Core ML 模块，提供独立的 AI 局部祛瑕／光影均肤。138 项本地 Release 测试通过；同一安装包已实际验证新控制、撤销、同步与撤回、命名配方和重启恢复，真实界面 6/6 原尺寸批量导出成功、原片保持。详情见 [精修说明与验证范围](Documentation/RETOUCH_0.5.4.md)。
+
 0.5.3 (19) Mac 完成[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库已实际验证美颜、参数锁、同步与撤回、重启保存和原尺寸导出；修复了目标照片打开时撤回同步又被旧预览覆盖的问题。
 
-原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.3 (19)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.4 (22)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
 
-[下载 Mac 0.5.3](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.3 使用说明与验证](Documentation/RELEASE_0.5.3.md)
+[下载 Mac 0.5.4](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.4) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.4 使用说明与验证](Documentation/RETOUCH_0.5.4.md) · [0.5.3 历史版](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3)
 
 **0.5.2 历史算法验收**保留120项Release检查、184参数逐项证据和真实DeepSeek执行。详见[实际算法验收范围](Documentation/ALGORITHM_ACCEPTANCE.md)；旧记录的时间与版本边界保留，不视为本轮新的在线调用。
 
@@ -12,7 +14,7 @@
 
 [Mac 0.5.1 性能更新](Documentation/RELEASE_0.5.1.md)提供交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），已完成独立测试图库中的原生界面、重启、紧凑布局与全尺寸美颜导出验收；原图库原片、配方与选片标记核对一致。
 
-当前提供 **184 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
+当前提供 **186 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
 
 选片支持星标/旗标/五色色标、组合筛选和排序；**13 组参数同步与整组撤回**保留目标锁，批量可按统一配方、每张已存设置或逐张 AI 方案导出。步骤见 [选片与同步](Documentation/PIXCAKE_WORKFLOW.md)。最终使用入口为 `Deliverables/LumaStudio.app`，历史包按版本保留。
 
@@ -24,7 +26,7 @@
 
 Mac 性能更新采用细粒度 Observation、后台 RAW 能力探测、有界缓存和 960px 交互/1600px 精细预览。M2 Pro、同一公开人像、Release 构建，强磨皮精细预览热中位数从 48.6ms 降至 23.4ms，交互 9.8ms；加塑形为 48.9→23.8ms，交互 9.7ms。最终精细输出与旧流程逐像素一致。这是图像引擎观测，实际界面还包含调度与显示耗时，不能作为界面帧率或所有设备保证。
 
-Android / Windows 目前提供可离线运行的图库、24 个基础参数、8 色 HSL、30 款原创滤镜、撤销/重做、逐张保存、中心裁切与批量导出。**平台功能范围不同**：完整 184 项专业控制、局部蒙版、16 位/ICC 输出、本地 Qwen 和语音/相机接口仍在 Mac。Portable 配方与 Mac 配方暂不互通。详情见上述客户端文档。
+Android / Windows 目前提供可离线运行的图库、24 个基础参数、8 色 HSL、30 款原创滤镜、撤销/重做、逐张保存、中心裁切与批量导出。**平台功能范围不同**：完整 186 项专业控制、局部蒙版、16 位/ICC 输出、本地 Qwen 和语音/相机接口仍在 Mac。Portable 配方与 Mac 配方暂不互通。详情见上述客户端文档。
 
 ## 开始使用
 
