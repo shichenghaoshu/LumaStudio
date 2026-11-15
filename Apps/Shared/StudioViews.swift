@@ -30,6 +30,9 @@ struct StudioRoot: View {
         .sheet(isPresented:$model.syncPresented) { SyncPanel(model:model,sync:model.sync) }
         .sheet(isPresented:$model.modelManagerPresented) { LocalModelsPanel(model:model) }
         #if os(macOS)
+        .sheet(isPresented:Binding(get:{model.directoryImportIntent != nil},set:{if !$0{model.directoryImportIntent=nil}})) {
+            if let intent=model.directoryImportIntent {MacDirectoryLocationSheet(model:model,intent:intent)}
+        }
         .sheet(isPresented:$model.integrationsPresented) { IntegrationSettingsView(model:model) }
         .sheet(isPresented:$model.recipeSyncPresented) { RecipeSyncSheet(model:model) }
         #endif

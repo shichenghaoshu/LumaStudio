@@ -10,7 +10,6 @@ struct ProInspectorView: View {
     @State private var selectiveBand="red"
     @State private var filterCategory="全部"
     @State private var myFilters=false
-    @State private var beautyIntensity: BeautyIntensity = .standard
     @State private var expanded: Set<String>=["whiteBalance","tone"]
     init(model: AppModel,section: ParameterSection? = nil) {self.model=model;self.section=section}
     var body: some View {
@@ -138,11 +137,11 @@ struct ProInspectorView: View {
         VStack(alignment:.leading,spacing:12) {
             HStack {Image(systemName:"person.crop.square");Text("人像美化").font(.system(size:13,weight:.semibold));Spacer();Text("\(model.faceCount) 张人脸").font(.caption).foregroundStyle(.secondary)}
             Toggle("启用美颜",isOn:$model.recipe.beauty.enabled).toggleStyle(.switch).font(.caption)
-            Picker("预设力度",selection:$beautyIntensity){ForEach(BeautyIntensity.allCases,id:\.self){level in Text(level.title).tag(level)}}.pickerStyle(.segmented).font(.caption).accessibilityLabel("美颜预设力度")
-            HStack(spacing:5){ForEach(BeautyStyle.allCases,id:\.self){style in Button(style.title){model.applyBeautyStyle(style,intensity:beautyIntensity)}.font(.system(size:11)).frame(maxWidth:.infinity).buttonStyle(.bordered).accessibilityLabel("\(beautyIntensity.title)\(style.title)美颜预设")}}
+            Picker("预设力度",selection:$model.beautyPresetIntensity){ForEach(BeautyIntensity.allCases,id:\.self){level in Text(level.title).tag(level)}}.pickerStyle(.segmented).font(.caption).accessibilityLabel("美颜预设力度")
+            HStack(spacing:5){ForEach(BeautyStyle.allCases,id:\.self){style in Button(style.title){model.applyBeautyStyle(style,intensity:model.beautyPresetIntensity)}.font(.system(size:11)).frame(maxWidth:.infinity).buttonStyle(.bordered).accessibilityLabel("\(model.beautyPresetIntensity.title)\(style.title)美颜预设")}}
                 .disabled(model.selected == nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
             HStack(spacing:8) {
-                Button{beautyIntensity = .strong;model.applyBeautyStyle(.intensive,intensity:.strong)}label:{Label("一键强效",systemImage:"sparkles")}.buttonStyle(.borderedProminent)
+                Button{model.beautyPresetIntensity = .strong;model.applyBeautyStyle(.intensive,intensity:.strong)}label:{Label("一键强效",systemImage:"sparkles")}.buttonStyle(.borderedProminent)
                     .disabled(model.selected == nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
                 Button("同步美颜…"){model.presentRecipeSynchronization(groups:[.beauty])}.buttonStyle(.bordered).disabled(!model.canSynchronize)
             }.font(.system(size:11)).controlSize(.small)

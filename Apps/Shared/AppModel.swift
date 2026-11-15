@@ -16,6 +16,7 @@ import PhotoCore
     var reviewBusy=false
     var recipeSyncPresented=false
     var recipeSyncGroups=RecipeSyncGroup.recommended
+    var beautyPresetIntensity: BeautyIntensity = .standard
     var workflowBusy=false
     var lastRecipeSync: RecipeSyncTransaction?
     var workflowStatus=""
@@ -105,6 +106,10 @@ import PhotoCore
     var profile: ColorProfile?
     var useCompanionJPEG=false { didSet { schedulePreview() } }
     var importerPresented=false
+    var directoryImportIntent: ImportIntent?
+    #if os(macOS)
+    @ObservationIgnored private var activeImportPanel: NSOpenPanel?
+    #endif
     var syncPresented=false
     var pairingInput=""
     var autoBeauty=true
@@ -310,6 +315,13 @@ import PhotoCore
         }
     }
     func choose(_ intent: ImportIntent) {
+        #if os(macOS)
+        switch intent {
+        case .photos,.reference,.recipe,.profile,.lut:break
+        default:directoryImportIntent=intent;return
+        }
+        guard activeImportPanel == nil else {activeImportPanel?.makeKeyAndOrderFront(nil);return}
+        #endif
         importIntent=intent
         #if os(macOS)
         let panel=NSOpenPanel();panel.allowsMultipleSelection=importMultiple
@@ -319,21 +331,41 @@ import PhotoCore
         panel.prompt=folder ? "选择文件夹" : "导入"
         // Some downloaded/created JSON and CUBE files retain a plain-text UTI.
         // Keep them selectable; the bounded importer validates actual contents.
-        if !folder {panel.allowedContentTypes=importTypes;panel.allowsOtherFileTypes=true}
+        panel.allowedContentTypes=folder ? [.folder]:importTypes
+        panel.allowsOtherFileTypes = !folder
         panel.canCreateDirectories=folder
+        activeImportPanel=panel
         let complete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
-            if response == .OK { self?.handleImport(.success(panel.urls)) }
+            self?.activeImportPanel=nil
+            if response == .OK {self?.importIntent=intent;self?.handleImport(.success(panel.urls))}
         }
-        // Begin after the menu has closed, with a complete AppKit modal
-        // session. This also works before SwiftUI assigns a key/main window.
+        // Keep the main queue available while AppKit validates selected files.
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps:true)
-            complete(panel.runModal())
+            if let window=NSApp.keyWindow ?? NSApp.mainWindow {panel.beginSheetModal(for:window,completionHandler:complete)}
+            else {panel.begin(completionHandler:complete)}
         }
         #else
         importerPresented=true
         #endif
     }
+    #if os(macOS)
+    func useDirectory(_ path:String,for intent:ImportIntent) {
+        do {
+            let expanded=(path.trimmingCharacters(in:.whitespacesAndNewlines) as NSString).expandingTildeInPath
+            guard (expanded as NSString).isAbsolutePath else {throw LumaError.unsupported("请粘贴完整的文件夹路径，或把文件夹拖到窗口中。")}
+            let url=URL(fileURLWithPath:expanded,isDirectory:true).standardizedFileURL
+            var isDirectory: ObjCBool=false
+            if FileManager.default.fileExists(atPath:url.path,isDirectory:&isDirectory) {
+                guard isDirectory.boolValue else {throw LumaError.unsupported("请选择文件夹，当前路径指向一个文件。")}
+            } else {
+                guard intent != .folder,intent != .modelPackage else {throw LumaError.unsupported("这个文件夹不存在，请选择包含照片或模型的现有目录。")}
+                try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true)
+            }
+            importIntent=intent;directoryImportIntent=nil;handleImport(.success([url]))
+        } catch {message=error.localizedDescription}
+    }
+    #endif
     func handleImport(_ result: Result<[URL],Error>) {
         let intent=importIntent
         Task {
@@ -397,9 +429,20 @@ import PhotoCore
         if !failures.isEmpty { message=failures.prefix(6).joined(separator:"\n") }
     }
     func oneClickBeauty() { recipe.beauty.enabled=true }
+    var canNavigatePhotos: Bool {preview != nil && !rendering && !agentBusy && !workflowBusy && !importing}
+    func adjacentPhoto(_ offset:Int)->PhotoAsset? {
+        let visible=visibleAssets
+        guard let index=visible.firstIndex(where:{$0.id==selectedID}),visible.indices.contains(index+offset) else {return nil}
+        return visible[index+offset]
+    }
+    func navigatePhoto(_ offset:Int) {
+        guard canNavigatePhotos,let target=adjacentPhoto(offset) else {return}
+        select(target)
+    }
     func applyBeautyStyle(_ style: BeautyStyle,intensity: BeautyIntensity = .standard) {
         guard !agentBusy,!workflowBusy,batchSnapshot?.active != true else {return}
         endParameterGesture()
+        beautyPresetIntensity=intensity
         do {recipe=Recipe(document:try style.applying(to:recipe.document,intensity:intensity))}
         catch {message=error.localizedDescription}
     }

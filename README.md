@@ -1,5 +1,7 @@
 # LumaStudio
 
+0.5.3 (18) 候选追加[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库的实际操作验收正在收束，公开稳定版仍保留 0.5.1。
+
 原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.1 (15)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。本轮新增 Android / Windows 客户端，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
 
 [下载 Mac 0.5.1](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.1) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.1 使用说明与验证](Documentation/RELEASE_0.5.1.md)
