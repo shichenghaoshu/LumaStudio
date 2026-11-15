@@ -202,11 +202,11 @@ import PhotoCore
         do { assets=try await library?.list() ?? [];photoReviews=try await library?.reviews() ?? [:];pruneHiddenSelection();savedRecipes=(try? FileManager.default.contentsOfDirectory(at:root.appendingPathComponent("Recipes"),includingPropertiesForKeys:nil).filter{$0.pathExtension=="json"}.sorted{$0.lastPathComponent<$1.lastPathComponent}) ?? [] }
         catch { message=error.localizedDescription }
     }
-    func select(_ asset: PhotoAsset,proposal: Recipe?=nil) {
+    func select(_ asset: PhotoAsset,proposal: Recipe?=nil,persistDepartingRecipe: Bool=true) {
         guard !workflowBusy else {return}
         // A fast switch can cancel a pending preview before its save. Persist
         // the departing photo independently of the preview's cancellation.
-        if let previous=selected,let library,!restoring {
+        if persistDepartingRecipe,let previous=selected,let library,!restoring {
             let snapshot=recipe
             Task {do {try await library.saveRecipe(snapshot,for:previous.id)}catch{message="保存上一张照片的设置失败："+error.localizedDescription}}
         }
@@ -910,7 +910,10 @@ extension AppModel {
             try await library.undoSynchronization(transaction)
             lastRecipeSync=nil;workflowStatus="已撤回 \(transaction.changes.count) 张照片的同步"
             workflowBusy=false
-            if refreshSelected,let asset=selected {select(asset)}
+            // The transaction already restored the selected photo on disk.
+            // Reload it without saving the stale, synchronized editor recipe
+            // over that restore as though we were departing for another photo.
+            if refreshSelected,let asset=selected {select(asset,persistDepartingRecipe:false)}
         } catch {workflowBusy=false;message=error.localizedDescription;if refreshSelected{schedulePreview()}}}
     }
     func copyRecipe() {
