@@ -3,6 +3,40 @@ import CoreImage
 import PhotoCore
 
 final class AgentTests: XCTestCase {
+    func testChineseBeautyTextMatchesPresetThroughModelSafetyGate() throws {
+        let ci=CIImage(color:.gray).cropped(to:CGRect(x:0,y:0,width:32,height:32))
+        let cg=try XCTUnwrap(CIContext().createCGImage(ci,from:ci.extent))
+        let analysis=ImageAnalysis(image:cg,faceCount:1,metrics:try PixelMetrics.measure(cg))
+        for (text,level) in [("轻柔中式美颜",BeautyIntensity.gentle),("中式美颜",.standard),("更强中式美颜",.strong)] {
+            let context=PlanningContext(instruction:text,analysis:analysis,preferences:EditingPreferences())
+            let expected=BeautyStyle.chinese.settings(intensity:level)
+            XCTAssertEqual(try LocalRulePlanner().plan(context).beauty,expected,text)
+            var proposed=EditRecipe();proposed.beauty=BeautyStyle.intensive.settings
+            XCTAssertEqual(try IntentSafetyGate.enforce(proposed,context:context).beauty,expected,text)
+        }
+    }
+    func testChineseBeautyTextKeepsExclusionsLocksAndPhotoState() throws {
+        let ci=CIImage(color:.gray).cropped(to:CGRect(x:0,y:0,width:32,height:32))
+        let cg=try XCTUnwrap(CIContext().createCGImage(ci,from:ci.extent))
+        let analysis=ImageAnalysis(image:cg,faceCount:1,metrics:try PixelMetrics.measure(cg))
+        var current=EditRecipe();current.global.exposure=0.4;current.geometry.cropAspect=1.3
+        current.masks=[LocalMask(id:"own-skin",kind:.brush)]
+        current.beauty.strength=0.23;current.lockedParameters=["beauty.strength"]
+        let context=PlanningContext(instruction:"中式美颜，不要瘦脸，不要大眼，不要美白",analysis:analysis,preferences:EditingPreferences(),currentRecipe:current)
+        let rule=try LocalRulePlanner().plan(context)
+        var proposed=EditRecipe();proposed.beauty=BeautyStyle.reshape.settings
+        for result in [rule,try IntentSafetyGate.enforce(proposed,context:context)] {
+            XCTAssertTrue(result.beauty.enabled);XCTAssertEqual(result.beauty.retouchBlemishes,0.95)
+            XCTAssertEqual(result.beauty.strength,current.beauty.strength)
+            XCTAssertEqual(result.beauty.faceSlimming,0);XCTAssertEqual(result.beauty.eyeEnlargement,0)
+            XCTAssertEqual(result.beauty.skinWhitening,0);XCTAssertEqual(result.beauty.skinTone,0)
+            XCTAssertEqual(result.global,current.global);XCTAssertEqual(result.geometry,current.geometry)
+            XCTAssertEqual(result.masks,current.masks);XCTAssertEqual(result.lockedParameters,current.lockedParameters)
+        }
+        let none=ImageAnalysis(image:cg,faceCount:0,metrics:try PixelMetrics.measure(cg))
+        XCTAssertFalse(try LocalRulePlanner().plan(PlanningContext(instruction:"中式美颜",analysis:none,preferences:EditingPreferences())).beauty.enabled)
+        XCTAssertFalse(try LocalRulePlanner().plan(PlanningContext(instruction:"中式美颜，但不要美颜",analysis:analysis,preferences:EditingPreferences())).beauty.enabled)
+    }
     func testIntensiveBeautyRespectsExplicitExclusionsAndManualState() throws {
         let cg=try XCTUnwrap(CIContext().createCGImage(CIImage(color:.gray).cropped(to:CGRect(x:0,y:0,width:32,height:32)),from:CGRect(x:0,y:0,width:32,height:32)))
         let analysis=ImageAnalysis(image:cg,faceCount:1,metrics:try PixelMetrics.measure(cg))

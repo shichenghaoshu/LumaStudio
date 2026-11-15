@@ -12,6 +12,7 @@ public enum IntentSafetyGate {
         let style=["风格","胶片","电影","日系","日式","通透","滤镜","film","cinematic","style","look"].contains(where:t.contains)
         let narrow=intent.brightnessDirection != 0 || intent.saturationDirection != 0 || intent.warmthDirection != 0 || intent.beautyRequested || intent.beautyForbidden || intent.requestedLocalRegion != nil
         if narrow && !style {
+            r.geometry=draft.geometry
             if intent.brightnessDirection==0 && !["曝光","亮度","exposure","brightness"].contains(where:t.contains) { r.global.exposure=draft.global.exposure }
             if intent.saturationDirection==0 { r.global.saturation=draft.global.saturation }
             if intent.warmthDirection==0 && !["白平衡","色温","white balance","temperature"].contains(where:t.contains) { r.global.temperature=draft.global.temperature }

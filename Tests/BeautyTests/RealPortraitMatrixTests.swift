@@ -45,7 +45,7 @@ final class RealPortraitMatrixTests: XCTestCase {
                 if style == .retouch && !eligible {
                     XCTAssertEqual(after,before,"Faces below the documented 100px minimum must be skipped without changing the photo")
                 } else {XCTAssertGreaterThan(changed,style == .natural ? 0:100,"\(input.lastPathComponent) \(style.rawValue)")}
-                if style != .reshape {XCTAssertLessThanOrEqual(unmasked,1,"Known zero-mask pixels must be preserved")}
+                if style.settings.faceSlimming==0 && style.settings.eyeEnlargement==0 {XCTAssertLessThanOrEqual(unmasked,1,"Known zero-mask pixels must be preserved")}
                 if style == .porcelain {XCTAssertGreaterThan(light,3,"Whitening must actually lift skin in this photograph")}
                 if style == .natural {natural=delta};if style == .intensive {intensive=delta}
                 styles.append(["style":style.rawValue,"skinMeanMaxChannelDelta8bit":delta,"skinMeanBrightnessChange8bit":light,"redMinusGreenChange8bit":redness,"zeroMaskMaxChange8bit":unmasked,"changedPixelsOver3":changed,"backend":engine.lastBackend])

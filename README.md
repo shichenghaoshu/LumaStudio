@@ -1,12 +1,14 @@
 # LumaStudio
 
-**0.5.4 (22) Mac AI 精修**随包离线运行局部瑕疵检测、局部修复及自适应混合层三个开放许可 Core ML 模块，提供独立的 AI 局部祛瑕／光影均肤。138 项本地 Release 测试通过；同一安装包已实际验证新控制、撤销、同步与撤回、命名配方和重启恢复，真实界面 6/6 原尺寸批量导出成功、原片保持。详情见 [精修说明与验证范围](Documentation/RETOUCH_0.5.4.md)。
+**0.5.4 (23) 中式美颜候选**组合本地 AI 祛瑕／光影均肤、磨皮、美白红润、瘦脸和大眼，提供轻柔／标准／更强三档；常驻按钮及 ⇧⌘B 直达中式标准预设，偏自然的 AI 精修保留独立入口。新增眉眼轮廓保护与公开侧脸、低照样图检查；当前候选尚待新增原生操作验收。详情见[中式美颜候选与验证边界](Documentation/CHINESE_BEAUTY_0.5.4.md)。
+
+历史 0.5.4 (22) 自然 AI 精修已通过 138 项本地 Release 检查与对应安装包的原生验收，保存在独立历史候选目录；该验收不覆盖本次中式 (23) 的新界面与效果。三个本地 Core ML 模块及其开放许可继续随包提供，详见[自然精修阶段记录](Documentation/RETOUCH_0.5.4.md)。
 
 0.5.3 (19) Mac 完成[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库已实际验证美颜、参数锁、同步与撤回、重启保存和原尺寸导出；修复了目标照片打开时撤回同步又被旧预览覆盖的问题。
 
-原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.4 (22)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+原生、非破坏性的摄影工作台。Mac 当前公开稳定版为 **0.5.3 (19)**，本分支候选为 **0.5.4 (23)**，Mac 专业版面向 macOS 14 及以上 Apple 芯片。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
 
-[下载 Mac 0.5.4](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.4) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.4 使用说明与验证](Documentation/RETOUCH_0.5.4.md) · [0.5.3 历史版](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3)
+[下载稳定 Mac 0.5.3](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.4 中式候选说明](Documentation/CHINESE_BEAUTY_0.5.4.md) · [0.5.3 历史版](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3)
 
 **0.5.2 历史算法验收**保留120项Release检查、184参数逐项证据和真实DeepSeek执行。详见[实际算法验收范围](Documentation/ALGORITHM_ACCEPTANCE.md)；旧记录的时间与版本边界保留，不视为本轮新的在线调用。
 
