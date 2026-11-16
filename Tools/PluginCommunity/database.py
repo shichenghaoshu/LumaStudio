@@ -19,6 +19,8 @@ class Database:
             CREATE INDEX IF NOT EXISTS events_plugin ON events(plugin_id,event);
             CREATE INDEX IF NOT EXISTS ratings_plugin ON ratings(plugin_id);
             CREATE INDEX IF NOT EXISTS favorites_user ON favorites(user_id,plugin_id);
+            CREATE TABLE IF NOT EXISTS follows(user_id TEXT NOT NULL REFERENCES users(id),author_id TEXT NOT NULL REFERENCES users(id),created_at INTEGER NOT NULL,CHECK(user_id != author_id),PRIMARY KEY(user_id,author_id));
+            CREATE INDEX IF NOT EXISTS follows_author ON follows(author_id);
             INSERT OR IGNORE INTO migrations VALUES(1,strftime('%s','now'));
             ''')
     @contextlib.contextmanager

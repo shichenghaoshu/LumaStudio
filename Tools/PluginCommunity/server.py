@@ -77,14 +77,20 @@ class Handler(BaseHTTPRequestHandler):
                 require(self.server.db.ready(),'数据库尚未就绪','not_ready',503);result={'status':'ready','migration':1}
             elif method=='GET' and path=='/api/config':result={'schemaVersion':1,'localOnly':True,'payments':'not_connected','payouts':'not_connected','maxPackageBytes':MAX_BYTES,'host':'macOS','runtime':'declarative-v1'}
             elif method=='GET' and path=='/api/me':result={'user':user}
+            elif method=='PUT' and path=='/api/me':
+                u=auth();result=self.server.accounts.update_profile(self.body(),u)
             elif method=='POST' and path in ['/api/register','/api/login']:
                 self.server.limit(('auth',self.client_address[0]),12,60)
                 user,newtoken=(self.server.accounts.register if path.endswith('register') else self.server.accounts.login)(self.body());headers=self.cookie(newtoken);result={'user':user}
             elif method=='POST' and path=='/api/logout':self.server.accounts.logout(token);headers=self.cookie('');result={'ok':True}
-            elif method=='GET' and path=='/api/plugins':result=catalog.search(get('q'),get('kind'),get('sort','recent'),user,get('favorites')=='1',get('mine')=='1')
+            elif method=='GET' and path=='/api/plugins':
+                require(re.fullmatch(r'[0-9]{1,7}',get('offset','0')) and re.fullmatch(r'[0-9]{1,3}',get('limit','24')),'分页参数无效')
+                result=catalog.search(get('q'),get('kind'),get('sort','recent'),user,get('favorites')=='1',get('mine')=='1',get('following')=='1',int(get('offset','0')),int(get('limit','24')),get('author'))
             elif method=='POST' and path=='/api/plugins':
                 u=auth();self.server.limit(('publish',u['id']),30,3600);result=catalog.publish(self.body(raw=True),u);status=201
             elif method=='GET' and re.fullmatch(r'/api/authors/[a-z][a-z0-9_-]{2,39}',path):result=catalog.author(path.split('/')[-1],user)
+            elif method=='PUT' and re.fullmatch(r'/api/authors/[a-z][a-z0-9_-]{2,39}/follow',path):
+                u=auth();result=catalog.follow(path.split('/')[-2],self.body(),u)
             elif re.fullmatch(r'/api/plugins/[a-z0-9.-]+(?:/(?:package|favorite|rating|report))?',path):
                 parts=path.split('/');pid=parts[3];action=parts[4] if len(parts)>4 else ''
                 if method=='GET' and not action:result=catalog.detail(pid,user)

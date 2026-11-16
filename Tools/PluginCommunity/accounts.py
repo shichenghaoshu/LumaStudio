@@ -45,3 +45,12 @@ class Accounts:
     def logout(self,token):
         if token:
             with self.db.connection() as db: db.execute('DELETE FROM sessions WHERE hash=?',(hashlib.sha256(token.encode()).hexdigest(),))
+    def update_profile(self,body,user):
+        keys(body,{'name','roles','bio'},{'name','roles','bio'})
+        require(text(body['name'],80),'昵称需为 1–80 字')
+        roles=body['roles']
+        require(isinstance(roles,list) and 1<=len(roles)<=3 and all(isinstance(r,str) and r in ['photographer','colorist','developer'] for r in roles) and len(set(roles))==len(roles),'请选择不重复的创作者身份')
+        require(isinstance(body['bio'],str) and len(body['bio'])<=600,'个人介绍最多 600 字')
+        with self.db.connection() as db:
+            db.execute('UPDATE users SET name=?,roles=?,bio=? WHERE id=?',(body['name'].strip(),json.dumps(roles),body['bio'],user['id']))
+            return {'user':self.profile(db.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone())}

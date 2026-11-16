@@ -33,21 +33,25 @@ class Catalog:
         counts={r['event']:r['n'] for r in db.execute('SELECT event,count(*) n FROM events WHERE plugin_id=? GROUP BY event',(row['id'],))}
         own=db.execute('SELECT score,comment FROM ratings WHERE plugin_id=? AND user_id=?',(row['id'],uid)).fetchone()
         return {'manifest':json.loads(row['manifest']),'example':bool(row['example']),'updatedAt':row['updated_at'],'rating':{'count':rating[0],'average':round(rating[1],2) if rating[1] else None},'downloads':counts.get('download',0),'trials':counts.get('trial',0),'favorites':db.execute('SELECT count(*) FROM favorites WHERE plugin_id=?',(row['id'],)).fetchone()[0],'favorite':bool(db.execute('SELECT 1 FROM favorites WHERE plugin_id=? AND user_id=?',(row['id'],uid)).fetchone()),'myRating':dict(own) if own else None,'canInstall':json.loads(row['manifest'])['license']['type']!='commercial' or row['owner_id']==uid,'owner':row['owner_id']==uid}
-    def search(self,q,kind,sort,user,favorites=False,mine=False):
+    def search(self,q,kind,sort,user,favorites=False,mine=False,following=False,offset=0,limit=24,author=''):
         require(len(q)<=120 and kind in ['', 'lut','recipe','localAdjustment','aiTool'] and sort in ['recent','rating','downloads'],'搜索参数无效')
-        if favorites or mine: require(user is not None,'请先登录','login_required',401)
+        require(integer(offset) and 0<=offset<=1000000 and integer(limit) and 1<=limit<=100,'分页参数无效')
+        require(isinstance(author,str) and len(author)<=40,'作者参数无效')
+        if favorites or mine or following: require(user is not None,'请先登录','login_required',401)
         conditions=[];params=[]
         if q:
-            conditions.append("instr(casefold(json_extract(manifest,'$.name') || ' ' || json_extract(manifest,'$.summary') || ' ' || json_extract(manifest,'$.author.name') || ' ' || owner_id || ' ' || json_extract(manifest,'$.tags')),?)>0");params.append(q.casefold())
+            conditions.append("instr(casefold(json_extract(manifest,'$.name') || ' ' || json_extract(manifest,'$.summary') || ' ' || json_extract(manifest,'$.author.name') || ' ' || owner_id || ' ' || COALESCE((SELECT u.name FROM users u WHERE u.id=p.owner_id),'') || ' ' || json_extract(manifest,'$.tags')),?)>0");params.append(q.casefold())
         if kind:conditions.append("json_extract(manifest,'$.kind')=?");params.append(kind)
         if mine:conditions.append('owner_id=?');params.append(user['id'])
+        if author:conditions.append('owner_id=?');params.append(author)
+        if following:conditions.append('EXISTS(SELECT 1 FROM follows f WHERE f.author_id=p.owner_id AND f.user_id=?)');params.append(user['id'])
         if favorites:conditions.append('EXISTS(SELECT 1 FROM favorites f WHERE f.plugin_id=p.id AND f.user_id=?)');params.append(user['id'])
         where=' WHERE '+' AND '.join(conditions) if conditions else ''
         order={'recent':'updated_at DESC,id','rating':'COALESCE((SELECT avg(score) FROM ratings r WHERE r.plugin_id=p.id),0) DESC,updated_at DESC','downloads':"(SELECT count(*) FROM events e WHERE e.plugin_id=p.id AND e.event='download') DESC,updated_at DESC"}[sort]
         with self.db.connection() as db:
             total=db.execute('SELECT count(*) FROM plugins p'+where,params).fetchone()[0]
-            rows=db.execute('SELECT * FROM plugins p'+where+' ORDER BY '+order+' LIMIT 100',params).fetchall()
-            return {'items':[self._item(db,row,user) for row in rows],'total':total}
+            rows=db.execute('SELECT * FROM plugins p'+where+' ORDER BY '+order+',p.id LIMIT ? OFFSET ?',params+[limit,offset]).fetchall()
+            return {'items':[self._item(db,row,user) for row in rows],'total':total,'offset':offset,'limit':limit,'hasMore':offset+len(rows)<total}
     def detail(self,pid,user):
         with self.db.connection() as db:
             row=db.execute('SELECT * FROM plugins WHERE id=?',(pid,)).fetchone();require(row is not None,'插件不存在','not_found',404)
@@ -87,6 +91,18 @@ class Catalog:
         with self.db.connection() as db:
             r=db.execute('SELECT id,name,roles,bio FROM users WHERE id=?',(uid,)).fetchone();require(r is not None,'作者不存在','not_found',404)
             profile=dict(r);profile['roles']=json.loads(profile['roles'])
-            rows=db.execute('SELECT * FROM plugins WHERE owner_id=? ORDER BY updated_at DESC',(uid,)).fetchall()
+            rows=db.execute('SELECT * FROM plugins WHERE owner_id=? ORDER BY updated_at DESC,id LIMIT 24',(uid,)).fetchall()
+            profile['pluginCount']=db.execute('SELECT count(*) FROM plugins WHERE owner_id=?',(uid,)).fetchone()[0]
+            profile['followers']=db.execute('SELECT count(*) FROM follows WHERE author_id=?',(uid,)).fetchone()[0]
+            profile['followingCount']=db.execute('SELECT count(*) FROM follows WHERE user_id=?',(uid,)).fetchone()[0]
+            profile['following']=bool(user and db.execute('SELECT 1 FROM follows WHERE user_id=? AND author_id=?',(user['id'],uid)).fetchone())
             profile['plugins']=[self._item(db,row,user) for row in rows]
             profile['earnings']={'status':'not_connected','currency':'CNY','amount':None};return profile
+    def follow(self,uid,body,user):
+        keys(body,{'value'},{'value'});require(type(body['value']) is bool,'关注状态需为布尔值')
+        require(uid!=user['id'],'不能关注自己','self_follow',422)
+        with self.db.connection() as db:
+            require(db.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone() is not None,'作者不存在','not_found',404)
+            if body['value']:db.execute('INSERT OR IGNORE INTO follows VALUES(?,?,?)',(user['id'],uid,int(time.time())))
+            else:db.execute('DELETE FROM follows WHERE user_id=? AND author_id=?',(user['id'],uid))
+        return self.author(uid,user)
