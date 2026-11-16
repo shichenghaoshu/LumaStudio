@@ -54,13 +54,14 @@ final class BeautyStressMatrixTests: XCTestCase {
                 let styles: [BeautyStyle] = variant=="original" ? BeautyStyle.allCases : [.intensive]
                 let levels: [BeautyIntensity] = variant=="original" ? BeautyIntensity.allCases : [.standard,.strong]
                 for style in styles {for level in levels {
-                    let output=try engine.apply(input,settings:style.settings(intensity:level),analysis:analysis,context:context),after=pixels(output)
+                    let settings=style.settings(intensity:level)
+                    let output=try engine.apply(input,settings:settings,analysis:analysis,context:context),after=pixels(output)
                     var delta=0.0,brightness=0.0,background=0
                     for p in skin {for c in 0..<3 {
                         let d=Double(Int(after[p*4+c])-Int(before[p*4+c]));delta+=abs(d);brightness+=d
                     }}
                     delta/=Double(max(1,skin.count*3));brightness/=Double(max(1,skin.count*3))
-                    if style != .reshape {
+                    if settings.faceSlimming==0 && settings.eyeEnlargement==0 {
                         for p in 0..<(w*h) where expandedMask[p*4]==0 {for c in 0..<3 {background=max(background,abs(Int(after[p*4+c])-Int(before[p*4+c])))}}
                         XCTAssertLessThanOrEqual(background,1,"\(name) \(variant) \(style) \(level): protected pixels")
                     }

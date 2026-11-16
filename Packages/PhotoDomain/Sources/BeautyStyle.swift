@@ -8,13 +8,22 @@ public enum BeautyIntensity: String, CaseIterable, Sendable {
 }
 
 public enum BeautyStyle: String, CaseIterable, Sendable {
-    case natural, studio, retouch, porcelain, intensive, reshape
+    case chinese, natural, studio, retouch, porcelain, intensive, reshape
     public var title: String {
-        switch self {case .natural:return "自然";case .studio:return "柔肤";case .retouch:return "AI 精修";case .porcelain:return "瓷白";case .intensive:return "高强度";case .reshape:return "塑形"}
+        switch self {case .chinese:return "中式美颜";case .natural:return "自然";case .studio:return "柔肤";case .retouch:return "AI 精修";case .porcelain:return "瓷白";case .intensive:return "高强度";case .reshape:return "塑形"}
     }
     public var settings: BeautySettings {
         var b=BeautySettings();b.enabled=true
         switch self {
+        case .chinese:
+            // Learned cleanup is followed by an intentionally visible portrait
+            // finish. Every value is saved in the normal editable v2 recipe.
+            b.retouchBlemishes=0.95;b.retouchDodgeBurn=0.9
+            b.strength=0.8;b.radius=24;b.texturePreservation=0.15;b.detailRecovery=0
+            b.blemishRemoval=0.7;b.skinTone=0.75;b.toneUniformity=0.85
+            b.skinBrightness=0.08;b.skinSaturation=0.92;b.shadowRepair=0.1
+            b.intensiveSmoothing=0.65;b.skinWhitening=0.6;b.skinRosiness=0.12
+            b.faceSlimming=0.4;b.eyeEnlargement=0.3
         case .natural: break
         case .studio:
             b.strength=0.78;b.radius=14;b.texturePreservation=0.68;b.blemishRemoval=0.6;b.skinTone=0.55;b.toneUniformity=0.55;b.skinBrightness=0.1;b.intensiveSmoothing=0.25
@@ -36,6 +45,22 @@ public enum BeautyStyle: String, CaseIterable, Sendable {
     /// per-photo batch exports do not depend on temporary inspector state.
     public func settings(intensity: BeautyIntensity) -> BeautySettings {
         var b=settings
+        if self == .chinese {
+            switch intensity {
+            case .standard:break
+            case .gentle:
+                b.retouchBlemishes=0.7;b.retouchDodgeBurn=0.65
+                b.strength=0.55;b.radius=18;b.texturePreservation=0.4
+                b.intensiveSmoothing=0.3;b.skinWhitening=0.28;b.skinRosiness=0.07
+                b.skinBrightness=0.03;b.faceSlimming=0.2;b.eyeEnlargement=0.15
+            case .strong:
+                b.retouchBlemishes=1;b.retouchDodgeBurn=1
+                b.strength=1;b.radius=30;b.texturePreservation=0.04
+                b.intensiveSmoothing=0.9;b.skinWhitening=0.9;b.skinRosiness=0.18
+                b.skinBrightness=0.12;b.faceSlimming=0.68;b.eyeEnlargement=0.5
+            }
+            return b
+        }
         if self == .retouch {
             switch intensity {
             case .gentle:b.retouchBlemishes=0.6;b.retouchDodgeBurn=0.55

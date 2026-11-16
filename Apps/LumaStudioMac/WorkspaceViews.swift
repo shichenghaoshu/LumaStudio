@@ -165,9 +165,9 @@ struct MacEditWorkspace: View {
             HStack {
                 Label(tab.rawValue=="调色" ? "色彩调节" : tab.rawValue,systemImage:tab.symbol).font(.system(size:12,weight:.medium))
                 Spacer()
-                Button {model.applyBeautyStyle(.retouch,intensity:.standard);show(.portrait)} label:{Label("AI 精修",systemImage:"sparkles")}
+                Button {model.applyBeautyStyle(.chinese,intensity:.standard);show(.portrait)} label:{Label("中式美颜",systemImage:"sparkles")}
                     .font(.system(size:11,weight:.medium)).buttonStyle(.plain).foregroundStyle(studioAccent)
-                    .keyboardShortcut("b",modifiers:[.command,.shift]).help("一键 AI 精修 ⇧⌘B").accessibilityLabel("一键 AI 精修")
+                    .keyboardShortcut("b",modifiers:[.command,.shift]).help("一键中式美颜 ⇧⌘B").accessibilityLabel("一键中式美颜")
                     .disabled(model.preview==nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
             }.padding(.horizontal,16).frame(height:42)
             ScrollView{

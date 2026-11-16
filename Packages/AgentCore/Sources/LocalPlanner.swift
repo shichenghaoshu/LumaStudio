@@ -109,7 +109,13 @@ public struct LocalRulePlanner: Sendable {
         if intent.beautyForbidden || faceCount==0 {r.beauty.enabled=false;return}
         if intent.beautyRequested {
             r.beauty.enabled=true
-            if !intent.preserveTexture {
+            if positive("中式美颜") {
+                let level:BeautyIntensity
+                if ["更强","强效","重度","高强度"].contains(where:positive) {level = .strong}
+                else if ["轻柔","轻度"].contains(where:positive) {level = .gentle}
+                else {level = .standard}
+                r.beauty=BeautyStyle.chinese.settings(intensity:level)
+            } else if !intent.preserveTexture {
                 let face=r.beauty.faceSlimming,eyes=r.beauty.eyeEnlargement
                 r.beauty=(positive("瓷白") ? BeautyStyle.porcelain : BeautyStyle.intensive).settings
                 r.beauty.faceSlimming=face;r.beauty.eyeEnlargement=eyes

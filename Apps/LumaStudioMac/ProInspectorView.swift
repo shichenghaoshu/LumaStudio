@@ -141,11 +141,11 @@ struct ProInspectorView: View {
             LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:5),count:3),spacing:5){ForEach(BeautyStyle.allCases,id:\.self){style in Button(style.title){model.applyBeautyStyle(style,intensity:model.beautyPresetIntensity)}.font(.system(size:11)).frame(maxWidth:.infinity).buttonStyle(.bordered).accessibilityLabel("\(model.beautyPresetIntensity.title)\(style.title)美颜预设")}}
                 .disabled(model.selected == nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
             HStack(spacing:8) {
-                Button{model.applyBeautyStyle(.retouch,intensity:model.beautyPresetIntensity)}label:{Label("一键 AI 精修",systemImage:"sparkles")}.buttonStyle(.borderedProminent)
+                Button{model.applyBeautyStyle(.chinese,intensity:model.beautyPresetIntensity)}label:{Label("一键中式美颜",systemImage:"sparkles")}.buttonStyle(.borderedProminent)
                     .disabled(model.selected == nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
                 Button("同步美颜…"){model.presentRecipeSynchronization(groups:[.beauty])}.buttonStyle(.bordered).disabled(!model.canSynchronize)
             }.font(.system(size:11)).controlSize(.small)
-            Text("AI 精修在本机处理，按所选力度祛瑕和均衡皮肤明暗，默认保留肤色与质感。预设可单步撤销并保留锁定参数；瓷白、高强度和塑形可另选。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            Text("中式美颜组合祛瑕、均肤、美白红润、瘦脸和大眼，按轻柔／标准／更强逐级增强。可单步撤销并保留锁定参数；偏自然的处理可选“AI 精修”。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             fold("aiRetouch","AI 精修",section:.portrait,ids:["beauty.retouchBlemishes","beauty.retouchDodgeBurn"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{$0.id.hasPrefix("beauty.retouch")});Text("局部祛瑕只修复模型识别的区域；光影均肤以混合层调整明暗。首次处理需要推理，拖动这两项复用缓存。低于 100 像素的人脸跳过；痣、雀斑也可能被识别为瑕疵，可降低祛瑕力度。").font(.caption2).foregroundStyle(.secondary)}
             fold("skin","高低频磨皮",section:.portrait,ids:["beauty.strength","beauty.radius","beauty.smoothing","beauty.texturePreservation","beauty.detailRecovery","beauty.sharpness","beauty.intensiveSmoothing"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{["strength","radius","smoothing","texturePreservation","detailRecovery","sharpness","intensiveSmoothing"].contains(String($0.id.split(separator:".").last!))})}
             fold("blemish","细小瑕疵弱化",section:.portrait,ids:["beauty.blemishRemoval","beauty.blemishThreshold"],defaultOpen:true){rows(ParameterCatalog.section(.portrait).filter{$0.id.contains("blemish")});Text("按局部红／暗变化弱化细小瑕疵，不能区分痣与痘痘。").font(.caption2).foregroundStyle(.secondary)}

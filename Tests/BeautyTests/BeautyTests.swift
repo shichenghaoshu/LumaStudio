@@ -35,14 +35,14 @@ final class BeautyTests: XCTestCase {
             for i in 0..<(w*h) {
                 let change=(0..<3).map{abs(Int(bytes[i*4+$0])-Int(original[i*4+$0]))}.max()!
                 if mask[i]>80 {delta += Double(change);white += Double(bytes[i*4])+Double(bytes[i*4+1])+Double(bytes[i*4+2])-Double(original[i*4])-Double(original[i*4+1])-Double(original[i*4+2]);count += 1}
-                if style != .reshape,mask[i]==0 {unmasked=max(unmasked,change)}
+                if style.settings.faceSlimming==0,style.settings.eyeEnlargement==0,mask[i]==0 {unmasked=max(unmasked,change)}
                 if style == .reshape,change>3 {shapeChanges += 1}
             }
             delta /= Double(max(1,count));white /= Double(max(1,count)*3)
             if style == .natural {naturalDelta=delta}
             if style == .intensive {intensiveDelta=delta}
             if style == .porcelain {whiteningDelta=white}
-            if style != .reshape {XCTAssertLessThanOrEqual(unmasked,1,"\(style.title) must preserve unmasked background")}
+            if style.settings.faceSlimming==0 && style.settings.eyeEnlargement==0 {XCTAssertLessThanOrEqual(unmasked,1,"\(style.title) must preserve unmasked background")}
             if let evidence=ProcessInfo.processInfo.environment["LUMA_BEAUTY_EVIDENCE"] {
                 let folder=URL(fileURLWithPath:evidence);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
                 try context.writePNGRepresentation(of:output,to:folder.appendingPathComponent("beauty-\(style.rawValue).png"),format:.RGBA8,colorSpace:space)

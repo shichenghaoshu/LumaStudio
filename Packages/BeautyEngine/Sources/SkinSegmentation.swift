@@ -57,15 +57,18 @@ public final class SkinSegmentation {
         var pixels=[UInt8](repeating:0,count:w*h*4)
         context.render(small,toBitmap:&pixels,rowBytes:w*4,bounds:CGRect(x:0,y:0,width:w,height:h),format:.RGBA8,colorSpace:CGColorSpace(name:CGColorSpace.sRGB))
         var mask=[Float](repeating:0,count:w*h), guide=mask,support=mask
-        struct FaceGeometry { let rect: CGRect; let excluded: [CGRect]; let cb: Float; let cr: Float }
+        struct FaceGeometry { let rect: CGRect; let excluded: [SkinFeatureProtection]; let cb: Float; let cr: Float }
         let geometry=faces.map { face -> FaceGeometry in
             let rect=face.boundingBox
             let landmarks=face.landmarks
-            let regions=[landmarks?.leftEye,landmarks?.rightEye,landmarks?.leftEyebrow,landmarks?.rightEyebrow,landmarks?.outerLips]
-            let excluded=regions.compactMap { region -> CGRect? in
+            let regions:[(VNFaceLandmarkRegion2D?,Bool)]=[(landmarks?.leftEye,true),(landmarks?.rightEye,true),(landmarks?.leftEyebrow,false),(landmarks?.rightEyebrow,false),(landmarks?.outerLips,true)]
+            let excluded=regions.compactMap { region,closed -> SkinFeatureProtection? in
                 guard let points=region?.normalizedPoints,!points.isEmpty else { return nil }
-                let xs=points.map{rect.minX+CGFloat($0.x)*rect.width},ys=points.map{rect.minY+CGFloat($0.y)*rect.height}
-                return CGRect(x:xs.min()!,y:ys.min()!,width:xs.max()!-xs.min()!,height:ys.max()!-ys.min()!).insetBy(dx:-0.035*rect.width,dy:-0.025*rect.height)
+                let contour=points.map{CGPoint(x:(rect.minX+CGFloat($0.x)*rect.width)*CGFloat(w),y:(rect.minY+CGFloat($0.y)*rect.height)*CGFloat(h))}
+                let faceWidth=rect.width*CGFloat(w)
+                // Follow the actual sloping contour. A padded axis-aligned brow
+                // rectangle creates a dark forehead band under strong whitening.
+                return SkinFeatureProtection(points:contour,closed:closed,coreRadius:faceWidth*(closed ? 0.009:0.006),featherRadius:faceWidth*(closed ? 0.024:0.02))
             }
             // Cheek chroma adapts the probability to the individual, not one target skin tone.
             var cbs=[Float](),crs=[Float]()
@@ -97,9 +100,7 @@ public final class SkinSegmentation {
                 func smooth(_ value: CGFloat)->Float {let t=min(1,max(0,Float(value)));return t*t*(3-2*t)}
                 var protected: Float=1
                 for feature in face.excluded {
-                    let fx=(point.x-feature.midX)/max(0.0001,feature.width*0.6)
-                    let fy=(point.y-feature.midY)/max(0.0001,feature.height*0.7)
-                    protected *= smooth((sqrt(fx*fx+fy*fy)-0.75)/0.65)
+                    protected *= feature.weight(at:CGPoint(x:point.x*CGFloat(w),y:point.y*CGFloat(h)))
                 }
                 guard protected>0 else {continue}
                 let cb = -0.168736*r-0.331264*g+0.5*b, cr=0.5*r-0.418688*g-0.081312*b
@@ -150,6 +151,29 @@ public final class SkinSegmentation {
                           width:b.width*0.98*extent.width,height:b.height*1.42*extent.height)
         }.reduce(CGRect.null){$0.union($1)}.intersection(extent)
         return SkinAnalysis(mask:maskImage,faceCount:faces.count,backend:backend,faces:features,processingBounds:skinBounds.isNull ? nil:skinBounds)
+    }
+}
+
+/// Distance to the real landmark contour, measured in pixels so portrait aspect
+/// ratios cannot stretch the feather. Closed eye/lip interiors stay protected.
+struct SkinFeatureProtection {
+    let points:[CGPoint]
+    let closed:Bool
+    let coreRadius:CGFloat
+    let featherRadius:CGFloat
+    func weight(at point:CGPoint)->Float {
+        guard points.count>1 else {return 1}
+        var inside=false,distance=CGFloat.greatestFiniteMagnitude
+        let count=closed ? points.count:points.count-1
+        for i in 0..<count {
+            let a=points[i],b=points[(i+1)%points.count],dx=b.x-a.x,dy=b.y-a.y
+            let t=min(1,max(0,((point.x-a.x)*dx+(point.y-a.y)*dy)/max(0.000001,dx*dx+dy*dy)))
+            distance=min(distance,hypot(point.x-a.x-t*dx,point.y-a.y-t*dy))
+            if closed,(a.y>point.y) != (b.y>point.y),point.x < a.x+(point.y-a.y)*dx/dy {inside.toggle()}
+        }
+        if inside {return 0}
+        let t=Float(min(1,max(0,(distance-coreRadius)/max(0.0001,featherRadius))))
+        return t*t*(3-2*t)
     }
 }
 
