@@ -18,3 +18,4 @@
 @_exported import AgentCore
 @_exported import CloudModel
 @_exported import VoiceBridge
+@_exported import PluginKit

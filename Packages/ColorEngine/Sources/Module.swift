@@ -113,12 +113,12 @@ public final class ColorProcessor: @unchecked Sendable {
             return Lab(l,a,b).rgb()
         }
     }
-    public func apply(_ image: CIImage, settings: ColorSettings, profile: ColorProfile?, skinMask: CIImage?, context: CIContext) throws -> CIImage {
+    public func apply(_ image: CIImage, settings: ColorSettings, profile: ColorProfile?, skinMask: CIImage?, context: CIContext,userLUTDirectory: URL=UserFilterLibrary.root) throws -> CIImage {
         guard settings.enabled else { return image }
         var result=image
         if let id=settings.presetID {
             let lut: LUT3D
-            if let builtin=FilterPreset(rawValue:id) {lut=try builtin.lut()} else {lut=try UserFilterLibrary.load(id:id)}
+            if let builtin=FilterPreset(rawValue:id) {lut=try builtin.lut()} else {lut=try UserFilterLibrary.load(id:id,at:userLUTDirectory)}
             result=lut.apply(to:result)
         }
         if let profile {

@@ -22,5 +22,7 @@ jobs:
         run: swift test
       - name: Voice MCP stdio protocol
         run: python3 -m unittest discover -s Tests/VoiceMCPTests -v
+      - name: Creator community API
+        run: python3 -m unittest discover -s Tests/PluginCommunityTests -v
       - name: Mac Release build
         run: xcodebuild -project LumaStudio.xcodeproj -scheme LumaStudioMac -configuration Release -destination 'platform=macOS' -derivedDataPath ReleaseData CODE_SIGN_IDENTITY=- build

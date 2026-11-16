@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "studio.luma.portrait-assistant",
+    "version": "1.0.0",
+    "name": "人像精修助手",
+    "summary": "把作者的修图方法交给宿主规划器执行；使用当前模型设置，不携带 API 密钥。",
+    "author": {
+      "id": "lumastudio",
+      "name": "LumaStudio 示例作者",
+      "roles": [
+        "photographer",
+        "colorist",
+        "developer"
+      ]
+    },
+    "kind": "aiTool",
+    "license": {
+      "type": "openSource",
+      "spdx": "MIT",
+      "sourceURL": "https://github.com/shichenghaoshu/LumaStudio/tree/main/Resources/Plugins/Examples",
+      "terms": "MIT License. Copyright (c) 2026 LumaStudio contributors. Permission is granted to use, copy, modify, merge, publish, distribute, sublicense and sell copies, subject to retaining the copyright and permission notice. Provided AS IS, without warranty. Full license: Resources/Plugins/LICENSE.txt."
+    },
+    "tags": [
+      "AI",
+      "人像",
+      "示例"
+    ],
+    "capabilities": [
+      "agent.plan",
+      "edit.recipe"
+    ],
+    "supports": [
+      "editor",
+      "batch",
+      "agent"
+    ]
+  },
+  "payload": {
+    "instruction": "适度提亮人物，保留高光，做通透自然美颜，不要瘦脸，不要大眼。用户补充：${request}"
+  },
+  "assets": []
+}
