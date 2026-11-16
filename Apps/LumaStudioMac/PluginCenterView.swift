@@ -117,7 +117,7 @@ struct PluginCommunityWebView: NSViewRepresentable {
                     guard let id=body["id"] as? String,id.count<=100,id.range(of:"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+){1,7}$",options:.regularExpression) != nil else {throw LumaError.corruptData("插件 ID 无效")}
                     let store=try PluginStore()
                     if action=="uninstall" {try await store.uninstall(id:id);respond(["ok":true,"installed":try await installedJSON(),"message":"插件已卸载；已生成的修图结果与 LUT 资源保留"]);return}
-                    let request=body["request"] as? String ?? ""
+                    let request=body["request"] as? String ?? "",localRules=body["localRules"] as? Bool ?? false
                     guard request.count<=1000 else {throw LumaError.corruptData("补充要求过长")}
                     if ["install","trial","download"].contains(action) {
                         let (data,commercialAuthorized)=try await download(id:id,mode:action=="trial" ? "trial" : action=="download" ? "download" : "install",version:body["version"] as? String)
@@ -128,12 +128,12 @@ struct PluginCommunityWebView: NSViewRepresentable {
                             _=try await store.install(data,commercialAuthorized:commercialAuthorized)
                             respond(["ok":true,"installed":try await installedJSON(),"message":"已安装。可应用到当前照片、批量导出或交给 Agent。"])
                         } else {
-                            let preview=try await model.previewPlugin(try PluginPackage.decode(data),request:request)
+                            let preview=try await model.previewPlugin(try PluginPackage.decode(data),request:request,localRules:localRules)
                             respond(["ok":true,"id":id,"preview":preview,"message":"试用已完成，当前编辑尚未改变"])
                         }
                     } else if ["apply","batch","agent"].contains(action) {
                         let package=try await store.package(id:id)
-                        let message=try await model.runInstalledPlugin(package,action:action,request:request)
+                        let message=try await model.runInstalledPlugin(package,action:action,request:request,localRules:localRules)
                         respond(["ok":true,"message":message])
                     } else {throw LumaError.unsupported("未知的插件操作")}
                 } catch {respond(["ok":false,"message":error.localizedDescription])}
