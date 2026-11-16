@@ -96,6 +96,7 @@ struct MacEditWorkspace: View {
             Spacer(minLength:10)
             HStack(spacing:12) {
                 Button{model.page = .capture}label:{Image(systemName:"camera")}.help("拍摄工作区").accessibilityLabel("拍摄工作区")
+                Button{model.pluginCenterPresented=true}label:{Image(systemName:"square.stack.3d.up")}.help("创作中心：插件、配方与创作者").accessibilityLabel("打开创作中心")
                 Button{model.integrationsPresented=true}label:{Image(systemName:"network")}.help("模型 API 与语音接入").accessibilityLabel("接入设置")
                 Button{model.modelManagerPresented=true}label:{Image(systemName:"cpu")}.help("本地模型").accessibilityLabel("本地模型设置")
                 Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.help("Agent 处理过程").accessibilityLabel("打开处理过程")

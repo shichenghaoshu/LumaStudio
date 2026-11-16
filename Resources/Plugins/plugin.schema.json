@@ -1,0 +1,428 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lumastudio.local/schema/plugin-v1.json",
+  "title": "LumaStudio declarative plugin v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifest",
+    "payload",
+    "assets"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "name",
+        "summary",
+        "author",
+        "kind",
+        "license",
+        "tags",
+        "capabilities",
+        "supports"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+){1,7}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})\\.(0|[1-9][0-9]{0,3})$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "kind": {
+          "enum": [
+            "lut",
+            "recipe",
+            "localAdjustment",
+            "aiTool"
+          ]
+        },
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "roles"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{2,39}$"
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "items": {
+                "enum": [
+                  "photographer",
+                  "colorist",
+                  "developer"
+                ]
+              }
+            }
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "terms"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "openSource",
+                "free",
+                "commercial"
+              ]
+            },
+            "terms": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "spdx": {
+              "enum": [
+                "MIT",
+                "Apache-2.0",
+                "BSD-3-Clause",
+                "CC0-1.0",
+                "CC-BY-4.0"
+              ]
+            },
+            "sourceURL": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "priceCents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            },
+            "currency": {
+              "enum": [
+                "CNY",
+                "USD"
+              ]
+            }
+          }
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "edit.recipe",
+              "edit.localMask",
+              "asset.lut",
+              "agent.plan"
+            ]
+          }
+        },
+        "supports": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "editor",
+              "batch",
+              "agent"
+            ]
+          }
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "tone",
+              "whiteBalance",
+              "color",
+              "curves",
+              "grading",
+              "style",
+              "beauty",
+              "detail",
+              "effects"
+            ]
+          }
+        },
+        "recipe": {
+          "$ref": "../../Packages/PhotoDomain/Sources/Resources/edit-recipe.schema.json"
+        },
+        "mask": {
+          "$ref": "../../Packages/PhotoDomain/Sources/Resources/edit-recipe.schema.json#/properties/masks/items"
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "lutAsset": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}\\.cube$"
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "data"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}\\.cube$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "manifest": {
+            "properties": {
+              "kind": {
+                "const": "lut"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "lutAsset",
+              "intensity"
+            ],
+            "propertyNames": {
+              "enum": [
+                "lutAsset",
+                "intensity"
+              ]
+            }
+          },
+          "manifest": {
+            "properties": {
+              "capabilities": {
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "enum": [
+                    "asset.lut",
+                    "edit.recipe"
+                  ]
+                }
+              }
+            }
+          },
+          "assets": {
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "manifest": {
+            "properties": {
+              "kind": {
+                "const": "recipe"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "groups",
+              "recipe"
+            ],
+            "propertyNames": {
+              "enum": [
+                "groups",
+                "recipe"
+              ]
+            }
+          },
+          "manifest": {
+            "properties": {
+              "capabilities": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "enum": [
+                    "edit.recipe"
+                  ]
+                }
+              }
+            }
+          },
+          "assets": {
+            "minItems": 0,
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "manifest": {
+            "properties": {
+              "kind": {
+                "const": "localAdjustment"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "mask"
+            ],
+            "propertyNames": {
+              "enum": [
+                "mask"
+              ]
+            }
+          },
+          "manifest": {
+            "properties": {
+              "capabilities": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "enum": [
+                    "edit.localMask"
+                  ]
+                }
+              }
+            }
+          },
+          "assets": {
+            "minItems": 0,
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "manifest": {
+            "properties": {
+              "kind": {
+                "const": "aiTool"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "instruction"
+            ],
+            "propertyNames": {
+              "enum": [
+                "instruction"
+              ]
+            }
+          },
+          "manifest": {
+            "properties": {
+              "capabilities": {
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "enum": [
+                    "agent.plan",
+                    "edit.recipe"
+                  ]
+                }
+              }
+            }
+          },
+          "assets": {
+            "minItems": 0,
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

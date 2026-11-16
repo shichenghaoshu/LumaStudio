@@ -33,6 +33,7 @@ struct StudioRoot: View {
         .sheet(isPresented:Binding(get:{model.directoryImportIntent != nil},set:{if !$0{model.directoryImportIntent=nil}})) {
             if let intent=model.directoryImportIntent {MacDirectoryLocationSheet(model:model,intent:intent)}
         }
+        .sheet(isPresented:$model.pluginCenterPresented) { PluginCenterView(model:model) }
         .sheet(isPresented:$model.integrationsPresented) { IntegrationSettingsView(model:model) }
         .sheet(isPresented:$model.recipeSyncPresented) { RecipeSyncSheet(model:model) }
         #endif

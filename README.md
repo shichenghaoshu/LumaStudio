@@ -1,14 +1,18 @@
 # LumaStudio
 
+**0.6.0 Preview 创作者插件**新增 Mac 创作中心：贡献 LUT、调色配方、局部工具和 AI 方法，搜索、试用、收藏、评分与版本安装。四类工具共用编辑器 / 批量 / Agent 执行接口。社区为随包运行的本机服务；商业许可可登记价格和条款，公网社区、支付、分账尚未接通。见[创作者插件说明](Documentation/CREATOR_PLUGINS.md)。
+
+**稳定版 0.5.5 (24)** 已发布：41 款内置风格中含 11 款相机灵感仿色，覆盖徕卡、哈苏与富士方向；152 项本地 Release 检查和对应 CI、原生操作验收通过。仿色是开源或原创近似，不是厂商官方校准。见[仿色来源与实际验证](Documentation/CAMERA_COLOR_LOOKS.md)。
+
 **0.5.4 (23) 中式美颜**组合本地 AI 祛瑕／光影均肤、磨皮、美白红润、瘦脸和大眼，提供轻柔／标准／更强三档；常驻按钮及 ⇧⌘B 直达中式标准预设，偏自然的 AI 精修保留独立入口。新增眉眼轮廓保护与公开侧脸、低照样图检查；144 项本地 Release 检查、对应源码 CI 与 17 组原生界面检查通过，实际 GUI 原尺寸批量导出 10/10、0 失败。详情见[中式美颜与验证边界](Documentation/CHINESE_BEAUTY_0.5.4.md)。
 
 历史 0.5.4 (22) 自然 AI 精修已通过 138 项本地 Release 检查与对应安装包的原生验收，保存在独立历史候选目录；该验收不覆盖本次中式 (23) 的新界面与效果。三个本地 Core ML 模块及其开放许可继续随包提供，详见[自然精修阶段记录](Documentation/RETOUCH_0.5.4.md)。
 
 0.5.3 (19) Mac 完成[快捷修图操作](Documentation/WORKFLOW_EFFICIENCY.md)：常驻强效美颜、上一张／下一张、原图与导出快捷键，以及粘贴／拖入文件夹路径。独立图库已实际验证美颜、参数锁、同步与撤回、重启保存和原尺寸导出；修复了目标照片打开时撤回同步又被旧预览覆盖的问题。
 
-原生、非破坏性的摄影工作台。Mac 当前版本为 **0.5.4 (23)**，面向 macOS 14 及以上 Apple 芯片；0.5.3 (19) 历史包保留。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
+原生、非破坏性的摄影工作台。Mac 稳定版为 **0.5.5 (24)**，创作者插件分支为 **0.6.0 Preview (25)**，面向 macOS 14 及以上 Apple 芯片；0.5.3 (19) 历史包保留。可以离线修图，也可选择自己的在线模型 API。应用原生集成 llama.cpp，核心功能不依赖 Python 或 Ollama。Android / Windows 客户端保留 0.5.0，说明与构建见 [跨平台客户端](Apps/LumaStudioCross/README.md)。iPad 旧工程保留，本次不做 iPad 构建与验收。
 
-[下载 Mac 0.5.4](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.4) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.4 中式美颜说明](Documentation/CHINESE_BEAUTY_0.5.4.md) · [0.5.3 历史版](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3)
+[下载 Mac 稳定版 0.5.5](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.5) · [Windows / Android 0.5.0](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.0) · [0.5.4 中式美颜说明](Documentation/CHINESE_BEAUTY_0.5.4.md) · [0.5.3 历史版](https://github.com/shichenghaoshu/LumaStudio/releases/tag/v0.5.3)
 
 **0.5.2 历史算法验收**保留120项Release检查、184参数逐项证据和真实DeepSeek执行。详见[实际算法验收范围](Documentation/ALGORITHM_ACCEPTANCE.md)；旧记录的时间与版本边界保留，不视为本轮新的在线调用。
 
@@ -16,7 +20,7 @@
 
 [Mac 0.5.1 性能更新](Documentation/RELEASE_0.5.1.md)提供交互/精细预览自动切换、稳定的人脸分析缓存，以及[五色色标、批量标记与组合筛选](Documentation/COLOR_LABELS.md)。98 项本机回归零失败（1 项可选模型权重未启用），已完成独立测试图库中的原生界面、重启、紧凑布局与全尺寸美颜导出验收；原图库原片、配方与选片标记核对一致。
 
-当前提供 **186 个标量控制、RGB 四通道曲线、三向色轮、30 款原创滤镜与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
+当前提供 **186 个标量控制、RGB 四通道曲线、三向色轮、41 款内置风格与自定义 CUBE 导入**。工作台采用大画布、底部胶片条、右侧折叠参数组和功能栏；AI 助手可与照片并排显示。EditRecipe v2 是手动、AI、预设和批量的同一份状态，支持 v1 迁移、撤销/重做、分组重置及 AI 参数锁。逐项能力见 [专业工作台](Documentation/PRO_EDITOR.md)。
 
 选片支持星标/旗标/五色色标、组合筛选和排序；**13 组参数同步与整组撤回**保留目标锁，批量可按统一配方、每张已存设置或逐张 AI 方案导出。步骤见 [选片与同步](Documentation/PIXCAKE_WORKFLOW.md)。最终使用入口为 `Deliverables/LumaStudio.app`，历史包按版本保留。
 
@@ -77,6 +81,7 @@ LUMA_PORTRAIT_FIXTURE="$PWD/work/fixtures/portrait.jpg" swift test
 - `Training`：独立数据生成、SFT／蒸馏／DPO、专用模型、量化和转换工具；正式训练尚未执行。
 - `Packages/CameraKit` / `PanasonicG9` / `TetherFolderWatcher`：设备接口、第一代 G9 原生实验与稳定目录监听。
 - `Packages/BeautyEngine`：实际 MetalPetal GPU 高通平滑、Vision、关键点保护、可选 Core ML、guided mask、纹理恢复与传统回退。
+- `Packages/PluginKit` / `Tools/PluginCommunity`：四类声明式插件、不可变版本安装、统一执行器和本机创作社区。
 - `Packages/CloudModel`：URLSession 在线规划、两种 API 格式、钥匙串凭据、严格配方与图片上传约束。
 - `Packages/VoiceBridge`：小智 MCP WebSocket、loopback HTTP、最终文字与有界去重；`Tools/VoiceMCP`：可选 stdio 适配器。
 - `Packages/ColorEngine`：41 个内置 LUT（30 个原有风格及 11 个徕卡／哈苏／富士方向独立仿色）、CUBE 导入、RGB 色阶与可选颜色、Lab、直方图、参考色彩档案与肤色保护。来源、许可和验证范围见 [相机仿色说明](Documentation/CAMERA_COLOR_LOOKS.md)。

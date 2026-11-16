@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "manifest": {
+    "id": "studio.luma.subject-light",
+    "version": "1.0.0",
+    "name": "人物补光 · 局部工具",
+    "summary": "调用 Apple Vision 人物区域并提亮，不改动背景与已有局部编辑。需要照片中可识别的人物。",
+    "author": {
+      "id": "lumastudio",
+      "name": "LumaStudio 示例作者",
+      "roles": [
+        "photographer",
+        "colorist",
+        "developer"
+      ]
+    },
+    "kind": "localAdjustment",
+    "license": {
+      "type": "openSource",
+      "spdx": "MIT",
+      "sourceURL": "https://github.com/shichenghaoshu/LumaStudio/tree/main/Resources/Plugins/Examples",
+      "terms": "MIT License. Copyright (c) 2026 LumaStudio contributors. Permission is granted to use, copy, modify, merge, publish, distribute, sublicense and sell copies, subject to retaining the copyright and permission notice. Provided AS IS, without warranty. Full license: Resources/Plugins/LICENSE.txt."
+    },
+    "tags": [
+      "局部",
+      "人物",
+      "示例"
+    ],
+    "capabilities": [
+      "edit.localMask"
+    ],
+    "supports": [
+      "editor",
+      "batch",
+      "agent"
+    ]
+  },
+  "payload": {
+    "mask": {
+      "id": "subject_light",
+      "kind": "subject",
+      "amount": 0.75,
+      "adjustments": {
+        "exposure": 0.55,
+        "shadows": 0.12
+      },
+      "feather": 0.02
+    }
+  },
+  "assets": []
+}

@@ -117,11 +117,13 @@ public actor PhotoProcessor {
     public nonisolated let decoder=ImageDecoder()
     private let beauty: BeautyProcessor
     private let color: ColorProcessor
+    private let userLUTDirectory: URL
     private let previewCache=NSCache<NSString,CIImage>()
     private let skinCache=NSCache<NSString,CachedSkinAnalysis>()
     private let semanticMasks=SemanticMaskEngine()
     private var maskCache: (String,Set<MaskKind>,[MaskKind:CIImage])?
-    public init(modelURL: URL? = nil) throws {
+    public init(modelURL: URL? = nil,userLUTDirectory: URL=UserFilterLibrary.root) throws {
+        self.userLUTDirectory=userLUTDirectory
         if let device=MTLCreateSystemDefaultDevice() { context=CIContext(mtlDevice:device,options:[.cacheIntermediates:false,.workingColorSpace:CGColorSpace(name:CGColorSpace.extendedLinearSRGB)!]) }
         else { context=CIContext(options:[.useSoftwareRenderer:true,.cacheIntermediates:false]) }
         beauty=try BeautyProcessor(modelURL:modelURL); color=try ColorProcessor();previewCache.countLimit=2;previewCache.totalCostLimit=40*1024*1024;skinCache.countLimit=2
@@ -168,7 +170,7 @@ public actor PhotoProcessor {
         }
         var colorSettings=r.color
         if r.edit != nil { colorSettings.exposure=0;colorSettings.contrast=1;colorSettings.saturation=1;colorSettings.temperature=6500 }
-        image=try color.apply(image,settings:colorSettings,profile:profile,skinMask:analysis?.mask,context:context)
+        image=try color.apply(image,settings:colorSettings,profile:profile,skinMask:analysis?.mask,context:context,userLUTDirectory:userLUTDirectory)
         if let edit=r.edit {
             image=try RecipeAdjustments.advancedColor(image,edit.color)
             let kinds=Set(edit.masks.map(\.kind)).subtracting([.brush])

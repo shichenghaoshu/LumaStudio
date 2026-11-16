@@ -2,6 +2,7 @@ import SwiftUI
 import Observation
 import OSLog
 import UniformTypeIdentifiers
+import ImageIO
 import PhotoCore
 
 @MainActor @Observable final class AppModel {
@@ -56,6 +57,8 @@ import PhotoCore
     var useLocalModel=true
     var modelManagerPresented=false
     var integrationsPresented=false
+    var pluginCenterPresented=false
+    @ObservationIgnored private var pluginTrial: (package:PluginPackage,before:Recipe,assetID:UUID,request:String,localRules:Bool,execution:PluginExecution)?
     var cloudSettings: CloudSettings = (UserDefaults.standard.data(forKey:"cloudSettings.v1").flatMap{try? JSONDecoder().decode(CloudSettings.self,from:$0)}) ?? CloudSettings() {
         didSet { if let data=try? JSONEncoder().encode(cloudSettings) { UserDefaults.standard.set(data,forKey:"cloudSettings.v1") };cloudConnectionStatus="配置已更改，尚未测试" }
     }
@@ -558,6 +561,22 @@ import PhotoCore
         } catch { message="本地 Agent 初始化失败：\(error.localizedDescription)" }
     }
     func runAgent() {
+        #if os(macOS)
+        if instruction.trimmingCharacters(in:.whitespacesAndNewlines).hasPrefix("/plugin ") {
+            let text=instruction.trimmingCharacters(in:.whitespacesAndNewlines)
+            Task {
+                do {
+                    let words=text.split(separator:" ",maxSplits:2).map(String.init)
+                    guard words.count>=2 else {throw LumaError.unsupported("格式：/plugin 插件ID 补充要求")}
+                    let package=try await (try PluginStore()).package(id:words[1])
+                    let result=try await runInstalledPlugin(package,action:"agent",request:words.count==3 ? words[2] : "")
+                    agentStatus=result
+                } catch {message=error.localizedDescription}
+            }
+            return
+        }
+        #endif
+
         guard !agentBusy,let asset=selected,let processor,let historyStore else { return }
         let text=instruction.trimmingCharacters(in:.whitespacesAndNewlines);guard !text.isEmpty else { return }
         cancelPreviewWorker();rendering=false
@@ -932,3 +951,118 @@ extension AppModel {
         #endif
     }
 }
+
+#if os(macOS)
+extension AppModel {
+    func savePluginPackage(_ data: Data) throws -> String {
+        let package=try PluginPackage.decode(data)
+        let folder=FileManager.default.urls(for:.downloadsDirectory,in:.userDomainMask)[0].appendingPathComponent("LumaStudioPlugins")
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        let path=folder.appendingPathComponent(package.manifest.id+"-"+package.manifest.version+"-"+UUID().uuidString.prefix(8)+".lumaplugin")
+        try data.write(to:path,options:.withoutOverwriting);exportedURL=path;return path.path
+    }
+    func shareablePluginRecipe() throws -> Any {
+        guard selected != nil else {throw LumaError.unsupported("请先在编辑器选择照片")}
+        var shared=recipe.document
+        shared.raw=RAWSettings();shared.geometry=GeometrySettings();shared.export=ExportSettings()
+        shared.masks=[];shared.operations=[];shared.lockedParameters=[];shared.evaluation=EvaluationSettings()
+        shared.color.referenceProfileID=nil
+        if let lut=shared.color.lut,lut.hasPrefix("user_") {shared.color.lut=nil}
+        return try JSONSerialization.jsonObject(with:shared.json())
+    }
+    private func pluginPlanner(package: PluginPackage,asset: PhotoAsset,base: Recipe,localRules: Bool) async throws -> PluginRuntime.Planner? {
+        guard package.manifest.kind == .aiTool else {return nil}
+        guard let processor else {throw LumaError.notConnected}
+        let photo=try await processor.render(url:workingURL(asset),recipe:base)
+        let analysis=try await Task.detached(priority:.userInitiated){try VisionAnalyzer.analyze(photo.original)}.value
+        let settings=cloudSettings,prefs=await preferenceMemory?.preferences() ?? EditingPreferences()
+        if localRules {
+            return {instruction,current in
+                let context=PlanningContext(instruction:instruction,analysis:analysis,preferences:prefs,currentRecipe:current,referenceProfileID:current.color.referenceProfileID)
+                return try IntentSafetyGate.enforce(LocalRulePlanner().plan(context),context:context)
+            }
+        }
+        var installed: InstalledModel?
+        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+        let local=NativeAgentPlanner(model:installed)
+        let planner: any AgentPlanner
+        if settings.mode == .online {
+            _=try settings.validate();guard let key=try await cloudKey(for:settings) else {throw LumaError.unsupported("请先在接入设置中配置在线模型密钥")}
+            let preview=settings.attachPreview ? try CloudPreview.jpeg(asset.thumbnailURL) : nil
+            let online=OnlineAgentPlanner(settings:settings,key:key,previewJPEG:preview)
+            planner=settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
+        } else {planner=local}
+        return { instruction,current in
+            let context=PlanningContext(instruction:instruction,analysis:analysis,preferences:prefs,currentRecipe:current,referenceProfileID:current.color.referenceProfileID)
+            return try IntentSafetyGate.enforce(await planner.plan(context).recipe,context:context)
+        }
+    }
+    func previewPlugin(_ package: PluginPackage,request: String,localRules: Bool=false) async throws -> [String:String] {
+        guard canSynchronize,let asset=selected,processor != nil else {throw LumaError.unsupported("请先选择照片，并等待当前处理完成")}
+        workflowBusy=true;defer{workflowBusy=false}
+        let baseline=recipe
+        let planner=try await pluginPlanner(package:package,asset:asset,base:baseline,localRules:localRules)
+        let trialRoot=FileManager.default.temporaryDirectory.appendingPathComponent("LumaPluginTrial-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:trialRoot,withIntermediateDirectories:true)
+        defer{try? FileManager.default.removeItem(at:trialRoot)}
+        if let id=baseline.document.color.lut,id.hasPrefix("user_") {
+            _=try UserFilterLibrary.load(id:id)
+            try FileManager.default.copyItem(at:UserFilterLibrary.root.appendingPathComponent(id+".cube"),to:trialRoot.appendingPathComponent(id+".cube"))
+        }
+        let execution=try await PluginRuntime.execute(package,on:baseline.document,context:.editor,request:request,lutDirectory:trialRoot,planner:planner)
+        let worker=try PhotoProcessor(modelURL:Self.modelURL(),userLUTDirectory:trialRoot)
+        let result=try await worker.render(url:workingURL(asset),recipe:Recipe(document:execution.recipe),profile:profile)
+        guard selectedID==asset.id,recipe==baseline else {throw LumaError.unsupported("照片或编辑已变更，请重新试用")}
+        // Rendering a trial never sets `recipe`, so no preview/save observer mutates the library.
+        let images=["before":try pluginJPEG(result.original),"after":try pluginJPEG(result.image)]
+        if package.manifest.kind == .aiTool {pluginTrial=(package,baseline,asset.id,request,localRules,execution)}
+        return images
+    }
+    func runInstalledPlugin(_ package: PluginPackage,action: String,request: String,localRules: Bool=false) async throws -> String {
+        guard canSynchronize,let asset=selected else {throw LumaError.unsupported("请先选择照片，并等待当前处理完成")}
+        workflowBusy=true;defer{workflowBusy=false}
+        if action=="batch" {
+            guard let library else {throw LumaError.notConnected}
+            let picked=visibleAssets.filter{selection.contains($0.id)}
+            guard !picked.isEmpty else {throw LumaError.unsupported("请先在底部照片列表选择需要导出的照片")}
+            var perPhoto=[UUID:Recipe](),inputs=[PhotoAsset](),executions=[UUID:PluginExecution]()
+            for source in picked {
+                let base=source.id==selectedID ? recipe : try await library.recipe(for:source.id)
+                let planner=try await pluginPlanner(package:package,asset:source,base:base,localRules:localRules)
+                let result=try await PluginRuntime.execute(package,on:base.document,context:.batch,request:request,planner:planner)
+                perPhoto[source.id]=Recipe(document:result.recipe);executions[source.id]=result
+                var input=source;input.originalURL=workingURL(source);inputs.append(input)
+            }
+            try await batch.start(assets:inputs,recipe:recipe,profile:profile,exportDirectory:root.appendingPathComponent("Exports"),libraryRoot:root,perPhotoRecipes:perPhoto) { [weak self] snapshot in await self?.receiveBatchSnapshot(snapshot) }
+            for input in inputs {if let execution=executions[input.id] {try savePluginReceipt(execution,photoID:input.id,phase:"queued")}}
+            return "已加入 \(inputs.count) 张照片的插件导出队列。关闭创作中心后可在批量工作区查看进度。"
+        }
+        let baseline=recipe,context: PluginContext=action=="agent" ? .agent : .editor
+        let result: PluginExecution,usedTrial: Bool
+        if action=="apply",let trial=pluginTrial,trial.package==package,trial.before==baseline,trial.assetID==asset.id,trial.request==request,trial.localRules==localRules {
+            result=trial.execution;usedTrial=true
+        } else {
+            let planner=try await pluginPlanner(package:package,asset:asset,base:baseline,localRules:localRules)
+            result=try await PluginRuntime.execute(package,on:baseline.document,context:context,request:request,planner:planner);usedTrial=false
+        }
+        guard selectedID==asset.id,recipe==baseline else {throw LumaError.unsupported("照片或编辑已变更，请重新应用")}
+        endParameterGesture();recipe=Recipe(document:result.recipe);userFilters=UserFilterLibrary.all()
+        try savePluginReceipt(result,photoID:asset.id,phase:usedTrial ? "applied-preview" : "applied");pluginTrial=nil
+        if context == .agent {agentStatus="Agent 已调用插件「\(package.manifest.name)」v\(package.manifest.version)"}
+        return "已\(context == .agent ? "由 Agent 调用" : "应用")「\(package.manifest.name)」，可在编辑器撤销。"
+    }
+    private func savePluginReceipt(_ execution: PluginExecution,photoID: UUID,phase: String) throws {
+        struct Receipt: Codable {let pluginID: String,version: String,context: PluginContext,photoID: UUID,changedParameters: [String],phase: String,date: Date}
+        let receipt=Receipt(pluginID:execution.pluginID,version:execution.version,context:execution.context,photoID:photoID,changedParameters:execution.changedParameters,phase:phase,date:Date())
+        let folder=root.appendingPathComponent("PluginRuns");try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+        try JSONEncoder().encode(receipt).write(to:folder.appendingPathComponent(UUID().uuidString+".json"),options:.atomic)
+    }
+    private func pluginJPEG(_ image: CGImage) throws -> String {
+        let data=NSMutableData()
+        guard let output=CGImageDestinationCreateWithData(data,"public.jpeg" as CFString,1,nil) else {throw LumaError.invalidImage("插件预览编码")}
+        CGImageDestinationAddImage(output,image,[kCGImageDestinationLossyCompressionQuality:0.82] as CFDictionary)
+        guard CGImageDestinationFinalize(output) else {throw LumaError.invalidImage("插件预览编码")}
+        return "data:image/jpeg;base64,"+(data as Data).base64EncodedString()
+    }
+}
+#endif
