@@ -8,11 +8,16 @@ final class ColorTests: XCTestCase {
             let back=Lab.from(c).rgb();XCTAssertEqual(c.r,back.r,accuracy:0.0001);XCTAssertEqual(c.g,back.g,accuracy:0.0001);XCTAssertEqual(c.b,back.b,accuracy:0.0001)
         }
     }
-    func testLUTRoundTripAndThirtyDistinctPresets() throws {
-        XCTAssertEqual(FilterPreset.allCases.count,30)
+    func testLUTRoundTripAndDistinctPresets() throws {
+        XCTAssertEqual(FilterPreset.allCases.count,41)
         XCTAssertEqual(FilterPreset.allCases.map(\.id),FilterIdentifiers.builtIn)
-        XCTAssertEqual(Set(try FilterPreset.allCases.map{try $0.lut().values}).count,30)
-        for p in FilterPreset.allCases {let l=try p.lut();let decoded=try LUT3D(cube:l.cube(title:p.name));XCTAssertEqual(l.dimension,17);XCTAssertEqual(l.values,decoded.values)}
+        XCTAssertEqual(Set(try FilterPreset.allCases.map{try $0.lut().values}).count,41)
+        for p in FilterPreset.allCases {
+            let l=try p.lut(),decoded=try LUT3D(cube:l.cube(title:p.name))
+            XCTAssertTrue([17,33].contains(l.dimension));XCTAssertEqual(l.values.count,decoded.values.count)
+            // The CUBE writer intentionally exports six decimal places.
+            XCTAssertLessThanOrEqual(zip(l.values,decoded.values).map{abs($0-$1)}.max() ?? 0,0.000001,p.id)
+        }
     }
     func testImportedCUBEIsAddressedByHashAndRejectsTampering() throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent("LumaLUT-"+UUID().uuidString)

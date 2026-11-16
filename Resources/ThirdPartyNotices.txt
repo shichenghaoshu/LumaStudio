@@ -295,3 +295,35 @@ https://www.modelscope.cn/models/iic/cv_unet_skin-retouching/summary
 Three converted Core ML components are bundled; no new training was performed.
 Full Apache license and adaptation details: LumaStudio_BeautyEngine.bundle/RetouchModels/{LICENSE.txt,NOTICE.txt}.
 Photoshop and Retouch4me are not bundled.
+
+
+Filmic camera-inspired color transforms
+Source: https://github.com/yingwang/filmic
+Commit: 219e30356cc80ae90e98d78be2af5da149d49116
+LumaStudio adapts six matrix/tone transforms to floating-point sRGB LUTs,
+and includes three algorithm-generated upstream CUBEs. No upstream grain
+or automatic crop. These are hand-tuned approximations, not vendor profiles.
+Two Xiaomi/Leica-inspired palettes are LumaStudio originals.
+
+MIT License
+
+Copyright (c) 2026 Ying Wang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+

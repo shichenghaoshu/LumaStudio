@@ -79,7 +79,7 @@ LUMA_PORTRAIT_FIXTURE="$PWD/work/fixtures/portrait.jpg" swift test
 - `Packages/BeautyEngine`：实际 MetalPetal GPU 高通平滑、Vision、关键点保护、可选 Core ML、guided mask、纹理恢复与传统回退。
 - `Packages/CloudModel`：URLSession 在线规划、两种 API 格式、钥匙串凭据、严格配方与图片上传约束。
 - `Packages/VoiceBridge`：小智 MCP WebSocket、loopback HTTP、最终文字与有界去重；`Tools/VoiceMCP`：可选 stdio 适配器。
-- `Packages/ColorEngine`：30 个真实原创 LUT、CUBE 导入、RGB 色阶与可选颜色、Lab、直方图、参考色彩档案与肤色保护。
+- `Packages/ColorEngine`：41 个内置 LUT（30 个原有风格及 11 个徕卡／哈苏／富士方向独立仿色）、CUBE 导入、RGB 色阶与可选颜色、Lab、直方图、参考色彩档案与肤色保护。来源、许可和验证范围见 [相机仿色说明](Documentation/CAMERA_COLOR_LOOKS.md)。
 - `Packages/PhotoPipeline`：ImageIO / CIRAWFilter + LibRaw 0.22.3 备用显影、Metal Core Image context、分级处理、预览缓存、非覆盖导出。
 - `Packages/BatchEngine`：有限并发、逐张独立 AI 方案、计划持久化与复用、暂停/继续/取消、重试、任务 JSON 恢复。
 - `Packages/LocalLibrary`：SwiftData ModelActor、本地索引、SHA256 去重、原片副本和 RAW/JPEG 配对。
