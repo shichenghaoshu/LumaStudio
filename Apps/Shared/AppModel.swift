@@ -58,6 +58,7 @@ import PhotoCore
     var modelManagerPresented=false
     var integrationsPresented=false
     var pluginCenterPresented=false
+    @ObservationIgnored private var pluginTrial: (package:PluginPackage,before:Recipe,assetID:UUID,request:String,localRules:Bool,execution:PluginExecution)?
     var cloudSettings: CloudSettings = (UserDefaults.standard.data(forKey:"cloudSettings.v1").flatMap{try? JSONDecoder().decode(CloudSettings.self,from:$0)}) ?? CloudSettings() {
         didSet { if let data=try? JSONEncoder().encode(cloudSettings) { UserDefaults.standard.set(data,forKey:"cloudSettings.v1") };cloudConnectionStatus="配置已更改，尚未测试" }
     }
@@ -1013,7 +1014,9 @@ extension AppModel {
         let result=try await worker.render(url:workingURL(asset),recipe:Recipe(document:execution.recipe),profile:profile)
         guard selectedID==asset.id,recipe==baseline else {throw LumaError.unsupported("照片或编辑已变更，请重新试用")}
         // Rendering a trial never sets `recipe`, so no preview/save observer mutates the library.
-        return ["before":try pluginJPEG(result.original),"after":try pluginJPEG(result.image)]
+        let images=["before":try pluginJPEG(result.original),"after":try pluginJPEG(result.image)]
+        if package.manifest.kind == .aiTool {pluginTrial=(package,baseline,asset.id,request,localRules,execution)}
+        return images
     }
     func runInstalledPlugin(_ package: PluginPackage,action: String,request: String,localRules: Bool=false) async throws -> String {
         guard canSynchronize,let asset=selected else {throw LumaError.unsupported("请先选择照片，并等待当前处理完成")}
@@ -1035,11 +1038,16 @@ extension AppModel {
             return "已加入 \(inputs.count) 张照片的插件导出队列。关闭创作中心后可在批量工作区查看进度。"
         }
         let baseline=recipe,context: PluginContext=action=="agent" ? .agent : .editor
-        let planner=try await pluginPlanner(package:package,asset:asset,base:baseline,localRules:localRules)
-        let result=try await PluginRuntime.execute(package,on:baseline.document,context:context,request:request,planner:planner)
+        let result: PluginExecution,usedTrial: Bool
+        if action=="apply",let trial=pluginTrial,trial.package==package,trial.before==baseline,trial.assetID==asset.id,trial.request==request,trial.localRules==localRules {
+            result=trial.execution;usedTrial=true
+        } else {
+            let planner=try await pluginPlanner(package:package,asset:asset,base:baseline,localRules:localRules)
+            result=try await PluginRuntime.execute(package,on:baseline.document,context:context,request:request,planner:planner);usedTrial=false
+        }
         guard selectedID==asset.id,recipe==baseline else {throw LumaError.unsupported("照片或编辑已变更，请重新应用")}
         endParameterGesture();recipe=Recipe(document:result.recipe);userFilters=UserFilterLibrary.all()
-        try savePluginReceipt(result,photoID:asset.id,phase:"applied")
+        try savePluginReceipt(result,photoID:asset.id,phase:usedTrial ? "applied-preview" : "applied");pluginTrial=nil
         if context == .agent {agentStatus="Agent 已调用插件「\(package.manifest.name)」v\(package.manifest.version)"}
         return "已\(context == .agent ? "由 Agent 调用" : "应用")「\(package.manifest.name)」，可在编辑器撤销。"
     }

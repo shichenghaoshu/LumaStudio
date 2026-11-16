@@ -53,6 +53,25 @@ def schema_check(value,schema,depth=0):
     elif t=='null': require(value is None,'参数需为空值')
     else: raise RuntimeError('Unsupported recipe schema keyword')
 
+def recipe_semantics(r):
+    """Cross-field checks beyond numeric JSON Schema, matching host admission."""
+    c=r.get('color',{});bands=[h['band'] for h in c.get('hsl',[])]
+    require(len(set(bands))==len(bands),'HSL 分组重复')
+    for points in c.get('curve',{}).values():
+        require(not points or (2<=len(points)<=16 and points[0]['x']==0 and points[-1]['x']==1 and all(a['x']<b['x'] for a,b in zip(points,points[1:]))),'曲线端点或顺序无效')
+    masks=r.get('masks',[]);ids=[m['id'] for m in masks]
+    require(len(set(ids))==len(ids),'局部区域 ID 重复')
+    for m in masks:
+        require(m['kind'] in ['face','skin','subject','background','brush'],'尚未支持该区域分割模型')
+        require(sum(len(stroke['points']) for stroke in m.get('strokes',[]))<=16384,'画笔点数总量超限')
+    locks=r.get('lockedParameters',[]);require(len(set(locks))==len(locks),'锁定参数重复')
+    operations=[{'tool':'global.adjust'}]+([{'tool':'beauty.skin'}] if r.get('beauty',{}).get('enabled',False) else [])+[{'tool':'color.adjust'}]+[{'tool':'local.adjust','maskID':mid} for mid in ids]
+    require(not r.get('operations') or r['operations']==operations,'工具调用与编辑声明不一致')
+    name=r.get('export',{}).get('nameTemplate','{name}_{id}')
+    require(bool(name) and '..' not in name and not any(ch in name for ch in ['/','\\']) and all(ord(ch)>=32 for ch in name),'输出命名规则无效')
+    for token in ['{name}','{id}','{index}','{date}']:name=name.replace(token,'')
+    require('{' not in name and '}' not in name,'输出命名占位符无效')
+
 def validate_cube(data):
     require(len(data)<=8*1024*1024,'LUT 超过 8 MB')
     try: lines=data.decode('utf-8').splitlines()
@@ -114,13 +133,13 @@ def decode_package(raw):
     if kind=='lut': require(len(assets)==1 and body['lutAsset']==assets[0]['path'] and isinstance(body['intensity'],(int,float)) and not isinstance(body['intensity'],bool) and math.isfinite(body['intensity']) and 0<=body['intensity']<=1,'LUT 资源或强度无效')
     if kind=='recipe':
         require(isinstance(body['groups'],list) and 1<=len(body['groups'])<=len(GROUPS) and all(v in GROUPS for v in body['groups']) and len(set(body['groups']))==len(body['groups']),'参数分组无效')
-        schema_check(body['recipe'],RECIPE_SCHEMA)
+        schema_check(body['recipe'],RECIPE_SCHEMA);recipe_semantics(body['recipe'])
         recipe=body['recipe'];require(recipe.get('version')==2,'仅支持 v2 编辑配方')
         require(recipe.get('color',{}).get('referenceProfileID') is None,'不能引用作者本机的档案')
         lut=recipe.get('color',{}).get('lut')
         require(lut is None or not lut.startswith('user_'),'请把自定义 LUT 发布为 LUT 插件')
     if kind=='localAdjustment':
-        schema_check({'version':2,'masks':[body['mask']]},RECIPE_SCHEMA)
+        schema_check({'version':2,'masks':[body['mask']]},RECIPE_SCHEMA);recipe_semantics({'masks':[body['mask']]})
         require(body['mask'].get('kind') in ['face','skin','subject','background','brush'],'尚未支持该区域分割模型')
     if kind=='aiTool': require(text(body['instruction'],2000),'AI 指令需为 1–2000 字')
     return p

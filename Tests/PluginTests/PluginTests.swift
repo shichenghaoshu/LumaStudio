@@ -73,6 +73,8 @@ final class PluginTests: XCTestCase {
         XCTAssertEqual(result.recipe.geometry,base.geometry);XCTAssertEqual(result.recipe.raw,base.raw)
         XCTAssertEqual(result.recipe.masks,base.masks);XCTAssertEqual(result.recipe.global.exposure,0.2);XCTAssertEqual(result.recipe.global.contrast,1.12)
         do {_=try await PluginRuntime.execute(p,on:base,context:.editor);XCTFail("Requires a planner") } catch {}
+        var excessive=p;excessive.payload.instruction=String(repeating:"${request}",count:100)
+        do {_=try await PluginRuntime.execute(excessive,on:base,context:.agent,request:String(repeating:"x",count:100),planner:{_,current in XCTFail("Oversized expansion must not reach a planner");return current});XCTFail("Expanded prompt must be bounded") } catch {}
         var unsupported=p;unsupported.manifest.supports=[.editor]
         do {_=try await PluginRuntime.execute(unsupported,on:base,context:.agent);XCTFail("Must enforce supported contexts") } catch {}
     }

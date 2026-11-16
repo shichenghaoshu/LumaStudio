@@ -81,6 +81,10 @@ class CommunityTests(unittest.TestCase):
         with self.assertRaises(APIError):decode_package(json.dumps(p).encode())
         p=self.package();p['payload']['groups']=['geometry']
         with self.assertRaises(APIError):decode_package(json.dumps(p).encode())
+        p=self.package();p['payload']['recipe']['color']['curve']={'master':[{'x':0,'y':0},{'x':0,'y':1}]}
+        with self.assertRaises(APIError):decode_package(json.dumps(p).encode())
+        p=self.package();p['payload']['recipe']['lockedParameters']=['global','global']
+        with self.assertRaises(APIError):decode_package(json.dumps(p).encode())
         p=self.package('aiTool');p['payload']['script']='exec'
         with self.assertRaises(APIError):decode_package(json.dumps(p).encode())
     def test_cookie_logout_cross_origin_host_validation_and_input_errors(self):

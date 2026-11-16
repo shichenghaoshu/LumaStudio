@@ -33,6 +33,7 @@ public enum PluginRuntime {
         case .aiTool:
             guard let planner else {throw LumaError.unsupported("当前宿主未提供 AI 规划器")}
             let instruction=package.payload.instruction!.replacingOccurrences(of:"${request}",with:request)
+            guard instruction.count<=3000 else {throw LumaError.corruptData("展开后的 AI 指令超过 3000 字，请减少模板占位符")}
             let proposal=try await planner(instruction,current)
             try ToolRegistry().validate(proposal)
             // Instruction tools may alter editing controls, never the target's crop,
