@@ -244,11 +244,11 @@ final class AlgorithmEffectTests: XCTestCase {
         let tintLow=try await render(mid,setting("color.calibration.shadowTint",-0.8),worker),tintHigh=try await render(mid,setting("color.calibration.shadowTint",0.8),worker)
         check("color.calibration.shadowTint","positive shadow tint moves from green toward magenta",tintLow.metric("magenta"),tintHigh.metric("magenta"),tintHigh.metric("magenta")>tintLow.metric("magenta"))
     }
-    func testAllThirtyFiltersHaveRealIntensityAndMonochromeBehavior() async throws {
+    func testAllFiltersHaveRealIntensityAndMonochromeBehavior() async throws {
         defer{persist("filter-contracts")}
         let source=try write("filter-chart"){x,y in RGB(0.15+Double(x)/384*0.6,0.2+Double(y)/256*0.6,0.4)},worker=try PhotoProcessor()
         let base=try await render(source,neutral(),worker)
-        XCTAssertEqual(FilterPreset.allCases.count,30)
+        XCTAssertEqual(FilterPreset.allCases.count,41)
         for preset in FilterPreset.allCases {
             var r=neutral();r.color.lut=preset.rawValue;r.color.intensity=0
             let zero=try await render(source,r,worker);r.color.intensity=1
@@ -260,7 +260,7 @@ final class AlgorithmEffectTests: XCTestCase {
                 check("filter.natural","natural preset preserves the source",0,full.difference(base),full.difference(base)<1.1/255)
             } else {check("filter."+preset.rawValue,"full intensity has a visible effect",0,full.difference(base),full.difference(base)>0.001)}
             check("color.intensity","half intensity lies between off and full for "+preset.rawValue,half.difference(base),full.difference(base),preset == .natural ? half.difference(base)<1.1/255 : (half.difference(base)<full.difference(base) && half.difference(base)>0))
-            if ["mono","matteMono","noir"].contains(preset.rawValue) {check("filter."+preset.rawValue,"monochrome preset removes chroma",base.chroma,full.chroma,full.chroma<0.015)}
+            if ["mono","matteMono","noir"].contains(preset.rawValue) || preset.cameraLook?.monochrome == true {check("filter."+preset.rawValue,"monochrome preset removes chroma",base.chroma,full.chroma,full.chroma<0.015)}
             if preset == .silver {check("filter.silver","silver toning suppresses source chroma while retaining its declared cool cast",base.chroma,full.chroma,full.chroma<base.chroma*0.15)}
         }
     }

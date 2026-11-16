@@ -51,7 +51,7 @@ public actor NativeAgentPlanner: AgentPlanner {
         REQUIRED keys, in this order: version,global,color,beauty,masks,operations,evaluation.
         version:1.
         global: object with optional numeric fields exposure[-3,3] EV default0,contrast[0.5,1.5] default1,highlights/shadows/whites/blacks/vibrance[-1,1] default0,temperature[2500,10000] default6500 (higher=warmer),tint[-100,100] default0,saturation[0,2] default1.
-        color: {"lut":null or "natural"/"portrait"/"film"/"warm"/"cool"/"clean","intensity":0..1,"referenceProfileID":null or supplied reference id}. This base-model planner uses these three color keys only.
+        color: {"lut":null or "natural"/"portrait"/"film"/"warm"/"cool"/"clean" or a camera look from rule_draft,"intensity":0..1,"referenceProfileID":null or supplied reference id}. Named Leica, Hasselblad and Fuji looks are independently approximated and selected by rule preflight; preserve their rule_draft lut. This base-model planner uses these three color keys only.
         beauty: {"enabled":boolean,"strength":0..1,"skinTone":0..1,"blemishRemoval":0..1,"texturePreservation":0..1}. Default disabled,strength0.35,texturePreservation0.94. Intensive retouch may reduce texture preservation to 0. Never enable when face_count=0 or user forbids it. The rule preflight applies requested intensive skin, slimming and eye enlargement controls.
         masks: [] or [{"id":"local_1","kind":"face"/"skin"/"subject"/"background","amount":1,"adjustments":{same numeric fields as global}}]. If user says only background/face/person, put adjustments in that mask and leave global neutral. Hair and sky are unavailable.
         operations:[] (the registry compiles safe ordered tool calls).

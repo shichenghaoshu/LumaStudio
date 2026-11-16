@@ -92,12 +92,21 @@ public struct BeautySettings: Codable, Equatable, Sendable {
     }
     public func encode(to encoder: Encoder) throws {
         var c=encoder.container(keyedBy:CodingKeys.self)
-        try c.encode(strength,forKey:.strength);try c.encode(radius,forKey:.radius);try c.encode(smoothing,forKey:.smoothing)
-        try c.encode(texturePreservation,forKey:.texturePreservation);try c.encode(detailRecovery,forKey:.detailRecovery);try c.encode(sharpness,forKey:.sharpness)
-        try c.encode(blemishRemoval,forKey:.blemishRemoval);try c.encode(blemishThreshold,forKey:.blemishThreshold);try c.encode(skinTone,forKey:.skinTone)
-        try c.encode(toneUniformity,forKey:.toneUniformity);try c.encode(skinTemperature,forKey:.skinTemperature);try c.encode(skinTint,forKey:.skinTint)
-        try c.encode(skinBrightness,forKey:.skinBrightness);try c.encode(skinSaturation,forKey:.skinSaturation);try c.encode(shadowRepair,forKey:.shadowRepair)
-        try c.encode(enabled,forKey:.enabled)
+        try c.encode(strength,forKey:.strength)
+        try c.encode(radius,forKey:.radius)
+        try c.encode(smoothing,forKey:.smoothing)
+        try c.encode(texturePreservation,forKey:.texturePreservation)
+        try c.encode(detailRecovery,forKey:.detailRecovery)
+        try c.encode(sharpness,forKey:.sharpness)
+        try c.encode(blemishRemoval,forKey:.blemishRemoval)
+        try c.encode(blemishThreshold,forKey:.blemishThreshold)
+        try c.encode(skinTone,forKey:.skinTone)
+        try c.encode(toneUniformity,forKey:.toneUniformity)
+        try c.encode(skinTemperature,forKey:.skinTemperature)
+        try c.encode(skinTint,forKey:.skinTint)
+        try c.encode(skinBrightness,forKey:.skinBrightness)
+        try c.encode(skinSaturation,forKey:.skinSaturation)
+        try c.encode(shadowRepair,forKey:.shadowRepair)
         if retouchBlemishes != 0 {try c.encode(retouchBlemishes,forKey:.retouchBlemishes)}
         if retouchDodgeBurn != 0 {try c.encode(retouchDodgeBurn,forKey:.retouchDodgeBurn)}
         if intensiveSmoothing != 0 {try c.encode(intensiveSmoothing,forKey:.intensiveSmoothing)}
@@ -105,6 +114,7 @@ public struct BeautySettings: Codable, Equatable, Sendable {
         if skinRosiness != 0 {try c.encode(skinRosiness,forKey:.skinRosiness)}
         if faceSlimming != 0 {try c.encode(faceSlimming,forKey:.faceSlimming)}
         if eyeEnlargement != 0 {try c.encode(eyeEnlargement,forKey:.eyeEnlargement)}
+        try c.encode(enabled,forKey:.enabled)
     }
 }
 

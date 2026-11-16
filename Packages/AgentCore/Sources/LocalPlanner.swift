@@ -5,7 +5,9 @@ import LocalMemory
 
 public enum InstructionParser {
     public static func parse(_ text: String) -> InstructionConstraints {
-        let t=text.lowercased();var intent=InstructionConstraints()
+        // A style name such as “富士鲜艳” is not an extra global saturation request.
+        let t=text.lowercased().replacingOccurrences(of:"(?:富士|fujifilm|fuji)\\s*(?:鲜艳|vivid)|(?:小米\\s*)?(?:徕卡|leica)\\s*(?:vivid|vibrant)",with:"",options:.regularExpression)
+        var intent=InstructionConstraints()
         func positive(_ word: String)->Bool {
             guard t.contains(word) else { return false }
             return t.range(of:"(?:不要|不用|不必|别|不需要|禁止|关闭|不)[^，。；,;但只]{0,3}"+NSRegularExpression.escapedPattern(for:word),options:.regularExpression)==nil
@@ -47,17 +49,20 @@ public struct LocalRulePlanner: Sendable {
     public init() {}
     public func plan(_ context: PlanningContext) throws -> EditRecipe {
         let t=context.instruction.lowercased(),intent=InstructionParser.parse(context.instruction)
+        let cameraLook=CameraColorLook.requested(in:context.instruction)
         let continuation=["再","继续","更","保持","在此基础","a little more","keep"].contains(where:t.contains)
         var r=context.currentRecipe ?? EditRecipe()
         if context.preferences.confirmationCount>0,context.currentRecipe==nil {
             r.beauty.strength=context.preferences.beautyStrength;r.beauty.texturePreservation=context.preferences.texturePreservation
             if !continuation { r.global.temperature=context.preferences.temperature;r.global.saturation=context.preferences.saturation;r.color.lut=context.preferences.preferredLUT }
         }
+        if cameraLook==nil {
         if t.contains("日系") || t.contains("日式") { r.global.contrast=0.92;r.global.shadows=0.12;r.global.highlights = -0.12;r.global.saturation=0.88;r.global.temperature=6750;r.color.lut="film";r.color.intensity=0.3 }
         else if t.contains("电影") || t.contains("cinematic") { r.global.contrast=1.12;r.global.highlights = -0.15;r.global.blacks=0.04;r.color.lut="film";r.color.intensity=0.45;r.color.grading.shadowSaturation=0.07;r.color.grading.highlightSaturation=0.04 }
         else if t.contains("胶片") || t.contains("film") { r.color.lut="film";r.color.intensity=0.55;r.global.blacks=0.1;r.global.highlights = -0.1 }
         if t.contains("通透") || t.contains("clean") { r.color.lut="clean";r.color.intensity=0.5;r.global.contrast=1.05;r.global.shadows=0.08;r.global.vibrance=0.1 }
         if t.contains("自然") || t.contains("natural") { r.beauty.strength=min(r.beauty.strength,0.35);r.beauty.texturePreservation=0.96;if ["更自然","再自然","more natural"].contains(where:t.contains) { r.color.intensity *= 0.7 } }
+        }
         if intent.beautyRequested,context.analysis.faceCount>0 { r.beauty.enabled=true }
         if intent.beautyForbidden { r.beauty.enabled=false }
         Self.applyBeautyRequest(context.instruction,to:&r,faceCount:context.analysis.faceCount)
@@ -97,6 +102,7 @@ public struct LocalRulePlanner: Sendable {
         }
         if t.contains("参考") || t.contains("reference") { r.color.referenceProfileID=context.referenceProfileID }
         Self.applyExplicitParameters(context.instruction,to:&r)
+        if let cameraLook {r=try cameraLook.applying(to:r)}
         r=ParameterLockPolicy.applying(r,preserving:context.currentRecipe)
         if intent.beautyForbidden || context.analysis.faceCount==0 {r.beauty.enabled=false}
         r.operations=[];try r.validateParameters();return r

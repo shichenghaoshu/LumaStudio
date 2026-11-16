@@ -2,6 +2,22 @@ import Foundation
 import CoreImage
 import PhotoDomain
 
+/// Load each immutable built-in table once, on first use. A larger catalog must
+/// not force every processor or thumbnail to parse all of its CUBE text eagerly.
+private final class BuiltInLUTCache: @unchecked Sendable {
+    static let shared=BuiltInLUTCache()
+    private let lock=NSLock()
+    private var tables=[String:LUT3D]()
+    func load(_ name:String) throws -> LUT3D {
+        lock.lock();defer{lock.unlock()}
+        if let cached=tables[name] {return cached}
+        guard let url=Bundle.module.url(forResource:name,withExtension:"cube") else {throw LumaError.corruptData("内置 LUT 缺失")}
+        let table=try LUT3D(cube:String(contentsOf:url))
+        tables[name]=table
+        return table
+    }
+}
+
 public struct LUT3D: Sendable {
     public let dimension: Int
     public let values: [Float] // R fastest, then G, then B; RGBA as required by Core Image.
@@ -43,10 +59,17 @@ public struct LUT3D: Sendable {
 }
 public enum FilterPreset: String, CaseIterable, Identifiable, Sendable {
     case natural, portrait, film, warm, cool, clean, ivory, rose, peach, softPortrait, amber, golden, copper, sunset, silver, mono, matteMono, noir, forest, jade, ocean, alpine, faded, vintage, instant, cinema, tealOrange, night, pastel, airy
+    case xiaomiLeicaClassic, xiaomiLeicaVivid, hasselbladNatural, hasselbladXPan, leicaStandard, leicaChrome, leicaMonochrom, fujiClassicChrome, fujiVelvia, fujiAstia, fujiAcros
     public var id: String { rawValue }
     public var name: String { rawValue.capitalized }
+    public var cameraLook: CameraColorLook? {CameraColorLook(rawValue:rawValue)}
+    public static var categories: [String] {["相机仿色","徕卡灵感","哈苏灵感","富士灵感","全部","基础","人像","暖光","胶片","风光","电影","黑白","清新"]}
+    public static func inCategory(_ category: String) -> [Self] {
+        let ordered=allCases.filter{$0.cameraLook != nil}+allCases.filter{$0.cameraLook == nil}
+        return ordered.filter{category=="全部" || (category=="相机仿色" ? $0.cameraLook != nil : $0.category==category)}
+    }
     public var title: String {
-        ["natural":"自然","portrait":"自然人像","film":"经典胶片","warm":"暖调","cool":"冷调","clean":"清透","ivory":"象牙白","rose":"玫瑰","peach":"蜜桃","softPortrait":"柔光人像","amber":"琥珀","golden":"金色时刻","copper":"铜色","sunset":"落日","silver":"银盐","mono":"经典黑白","matteMono":"哑光黑白","noir":"黑色电影","forest":"森林","jade":"青玉","ocean":"海岸","alpine":"山野","faded":"褪色胶片","vintage":"复古","instant":"即影","cinema":"电影","tealOrange":"青橙","night":"夜色","pastel":"粉彩","airy":"空气感"][id] ?? name
+        cameraLook?.title ?? ["natural":"自然","portrait":"自然人像","film":"经典胶片","warm":"暖调","cool":"冷调","clean":"清透","ivory":"象牙白","rose":"玫瑰","peach":"蜜桃","softPortrait":"柔光人像","amber":"琥珀","golden":"金色时刻","copper":"铜色","sunset":"落日","silver":"银盐","mono":"经典黑白","matteMono":"哑光黑白","noir":"黑色电影","forest":"森林","jade":"青玉","ocean":"海岸","alpine":"山野","faded":"褪色胶片","vintage":"复古","instant":"即影","cinema":"电影","tealOrange":"青橙","night":"夜色","pastel":"粉彩","airy":"空气感"][id] ?? name
     }
     public var category: String {
         switch self {
@@ -58,16 +81,15 @@ public enum FilterPreset: String, CaseIterable, Identifiable, Sendable {
         case .film,.faded,.vintage,.instant:return "胶片"
         case .cinema,.tealOrange,.night:return "电影"
         case .pastel,.airy:return "清新"
+        default:return cameraLook?.category ?? "基础"
         }
     }
     public func lut() throws -> LUT3D {
-        guard let url=Bundle.module.url(forResource: rawValue, withExtension: "cube") else { throw LumaError.corruptData("内置 LUT 缺失") }
-        return try LUT3D(cube: String(contentsOf: url))
+        try BuiltInLUTCache.shared.load(rawValue)
     }
 }
 public final class ColorProcessor: @unchecked Sendable {
-    private let luts: [String: LUT3D]
-    public init() throws { luts = try Dictionary(uniqueKeysWithValues: FilterPreset.allCases.map{($0.rawValue,try $0.lut())}) }
+    public init() throws {}
     public func analyze(_ image: CIImage, context: CIContext) throws -> ColorStatistics {
         let scale=min(1,160/max(image.extent.width,image.extent.height)); let small=image.transformed(by: CGAffineTransform(scaleX: scale,y: scale))
         let w=max(1,Int(small.extent.width)), h=max(1,Int(small.extent.height))
@@ -96,7 +118,7 @@ public final class ColorProcessor: @unchecked Sendable {
         var result=image
         if let id=settings.presetID {
             let lut: LUT3D
-            if let builtin=luts[id] {lut=builtin} else {lut=try UserFilterLibrary.load(id:id)}
+            if let builtin=FilterPreset(rawValue:id) {lut=try builtin.lut()} else {lut=try UserFilterLibrary.load(id:id)}
             result=lut.apply(to:result)
         }
         if let profile {

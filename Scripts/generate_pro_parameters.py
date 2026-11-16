@@ -187,6 +187,7 @@ public struct LevelsSettings: Codable, Equatable, Sendable {
         else:props[prefix]=target
     props['color']['properties']['enabled']={'type':'boolean','default':True}
     filter_ids=['natural','portrait','film','warm','cool','clean','ivory','rose','peach','softPortrait','amber','golden','copper','sunset','silver','mono','matteMono','noir','forest','jade','ocean','alpine','faded','vintage','instant','cinema','tealOrange','night','pastel','airy']
+    filter_ids += ['xiaomiLeicaClassic','xiaomiLeicaVivid','hasselbladNatural','hasselbladXPan','leicaStandard','leicaChrome','leicaMonochrom','fujiClassicChrome','fujiVelvia','fujiAstia','fujiAcros']
     props['color']['properties']['lut']={'anyOf':[{'type':'null'},{'type':'string','enum':filter_ids},{'type':'string','pattern':'^user_[a-f0-9]{64}$'}]}
     props['color']['properties']['hsl']['items']['required']=['band']
     props['geometry']['properties']['cropAspect']={'type':'number','minimum':0,'maximum':3}

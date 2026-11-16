@@ -9,6 +9,9 @@ public enum IntentSafetyGate {
         var r=proposed
         let intent=InstructionParser.parse(context.instruction),t=context.instruction.lowercased()
         let draft=try LocalRulePlanner().plan(context)
+        // A named camera look is a narrow color request. The deterministic draft
+        // keeps crop, beauty, masks and unmentioned controls even with a broad model plan.
+        if CameraColorLook.requested(in:context.instruction) != nil {r=draft}
         let style=["风格","胶片","电影","日系","日式","通透","滤镜","film","cinematic","style","look"].contains(where:t.contains)
         let narrow=intent.brightnessDirection != 0 || intent.saturationDirection != 0 || intent.warmthDirection != 0 || intent.beautyRequested || intent.beautyForbidden || intent.requestedLocalRegion != nil
         if narrow && !style {

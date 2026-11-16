@@ -361,7 +361,18 @@
                 "tealOrange",
                 "night",
                 "pastel",
-                "airy"
+                "airy",
+                "xiaomiLeicaClassic",
+                "xiaomiLeicaVivid",
+                "hasselbladNatural",
+                "hasselbladXPan",
+                "leicaStandard",
+                "leicaChrome",
+                "leicaMonochrom",
+                "fujiClassicChrome",
+                "fujiVelvia",
+                "fujiAstia",
+                "fujiAcros"
               ]
             },
             {
@@ -966,9 +977,6 @@
           "maximum": 1,
           "default": 0
         },
-        "enabled": {
-          "type": "boolean"
-        },
         "intensiveSmoothing": {
           "type": "number",
           "minimum": 0,
@@ -998,6 +1006,9 @@
           "minimum": 0,
           "maximum": 1,
           "default": 0
+        },
+        "enabled": {
+          "type": "boolean"
         }
       }
     },

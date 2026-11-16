@@ -1,0 +1,65 @@
+{
+  "repository": "https://github.com/yingwang/filmic",
+  "commit": "219e30356cc80ae90e98d78be2af5da149d49116",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Ying Wang",
+  "scope": "Hand-tuned color approximations, not calibrated camera matching. LUT-only adaptation omits upstream grain.",
+  "files": [
+    {
+      "path": "Resources/ColorLooks/Filmic/LICENSE",
+      "upstreamPath": "LICENSE",
+      "gitBlob": "bdfcece9ab7f82ae95dcd8bd2a1973700075dd69",
+      "bytes": 1067,
+      "sha256": "8a6d2fdfde0d3590d9fcce60d39600cbbfff46d0726de1cd878af256e5baadf6"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/README.md",
+      "upstreamPath": "README.md",
+      "gitBlob": "7c0dff836761dad7bf71b431b75b35f8aaaa033a",
+      "bytes": 4083,
+      "sha256": "0b27a2d461cd85431e0183729e86c5213e448778884fb39c1885197093393199"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/Styles.kt",
+      "upstreamPath": "app/src/main/java/com/yingwang/filmic/lut/Styles.kt",
+      "gitBlob": "2c88e85466c92ab97e7ce133ba71782d2026e9d9",
+      "bytes": 4589,
+      "sha256": "8464e0216fd763c488a45b8175144bca3e11716a4f06bb0a8f545b3fd4b52636"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/LutProcessor.kt",
+      "upstreamPath": "app/src/main/java/com/yingwang/filmic/lut/LutProcessor.kt",
+      "gitBlob": "3835a61fe04d0f98799112ff3026ce2072434628",
+      "bytes": 5490,
+      "sha256": "1bb44e08b0f1fbb39876d32162252df831c818846dea843cb3db951ac203b479"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/Style.kt",
+      "upstreamPath": "app/src/main/java/com/yingwang/filmic/lut/Style.kt",
+      "gitBlob": "fd28c6144dff6941ee0e0d7d68a23de82d1bec72",
+      "bytes": 1106,
+      "sha256": "e059fcef00d7112b23a259b623d721fe6102a7b2dfb1675fb55aaadd7006eac6"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/hasselblad_xpan.cube",
+      "upstreamPath": "app/src/main/assets/lut/hasselblad_xpan.cube",
+      "gitBlob": "3a71d059b28cd39a1562a015f392ecacfe9febc8",
+      "bytes": 132733,
+      "sha256": "b86ad85aab6685a8446b5e02cba4a7674afc65d6a364e12050a8e6ef2d1f1d85"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/fuji_astia.cube",
+      "upstreamPath": "app/src/main/assets/lut/fuji_astia.cube",
+      "gitBlob": "bbd5ac910312f75fe74dd52a994041cc240896dc",
+      "bytes": 132734,
+      "sha256": "cb2b5af4b0f148a7a1f2cc19462ee31910699487cc1829e044df282c28089405"
+    },
+    {
+      "path": "Resources/ColorLooks/Filmic/leica_chrome.cube",
+      "upstreamPath": "app/src/main/assets/lut/leica_chrome.cube",
+      "gitBlob": "a7c099ca95f8973f9e990071d79afd4ed9bd3350",
+      "bytes": 132741,
+      "sha256": "8fb8e6216860fb1c00177dbc7c2d7a4de786759f7719b997d79e89ab33e5f31d"
+    }
+  ]
+}

@@ -8,7 +8,7 @@ struct ProInspectorView: View {
     @State private var hue: HueBand = .red
     @State private var levelChannel="master"
     @State private var selectiveBand="red"
-    @State private var filterCategory="全部"
+    @State private var filterCategory="相机仿色"
     @State private var myFilters=false
     @State private var expanded: Set<String>=["whiteBalance","tone"]
     init(model: AppModel,section: ParameterSection? = nil) {self.model=model;self.section=section}
@@ -167,11 +167,17 @@ struct ProInspectorView: View {
     }
     private var filterBrowser: some View {
         VStack(alignment:.leading,spacing:12) {
-            Picker("滤镜来源",selection:$myFilters){Text("推荐 · 30").tag(false);Text("我的").tag(true)}.pickerStyle(.segmented)
+            Picker("滤镜来源",selection:$myFilters){Text("内置 · \(FilterPreset.allCases.count)").tag(false);Text("我的").tag(true)}.pickerStyle(.segmented)
             if !myFilters {
-                ScrollView(.horizontal){HStack(spacing:6){ForEach(["全部","基础","人像","暖光","胶片","风光","电影","黑白","清新"],id:\.self){category in Button(category){filterCategory=category}.font(.system(size:10)).buttonStyle(.plain).padding(.horizontal,9).padding(.vertical,6).background(category==filterCategory ? studioAccent.opacity(0.14) : .white.opacity(0.04),in:Capsule()).foregroundStyle(category==filterCategory ? studioAccent : .secondary)}}}.scrollIndicators(.hidden)
+                Picker("风格分类",selection:$filterCategory){ForEach(FilterPreset.categories,id:\.self){Text($0).tag($0)}}.font(.caption).accessibilityLabel("滤镜风格分类")
+                if ["相机仿色","徕卡灵感","哈苏灵感","富士灵感"].contains(filterCategory) {
+                    Text("独立仿色，非品牌官方算法。只改变色彩，可与中式美颜叠加。").font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                }
                 LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible()),GridItem(.flexible())],spacing:11){
-                    ForEach(FilterPreset.allCases.filter{filterCategory=="全部" || $0.category==filterCategory}){preset in Button{model.applyPreset(preset.id)}label:{PresetPhotoPreview(asset:model.selected,preset:preset,selected:model.recipe.color.presetID==preset.id)}.buttonStyle(.plain).accessibilityLabel(preset.title+"滤镜")}
+                    ForEach(FilterPreset.inCategory(filterCategory)){preset in Button{model.applyPreset(preset.id)}label:{PresetPhotoPreview(asset:model.selected,preset:preset,selected:model.recipe.color.presetID==preset.id)}.buttonStyle(.plain).accessibilityLabel(preset.title+"滤镜").help(preset.cameraLook?.detail ?? preset.title)}
+                }
+                if let id=model.recipe.color.presetID,let look=CameraColorLook(rawValue:id) {
+                    Text(look.detail).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 }
             } else {
                 if model.userFilters.isEmpty {Text("导入自己的 .cube 滤镜，保存在本机。").font(.caption).foregroundStyle(.secondary)}
