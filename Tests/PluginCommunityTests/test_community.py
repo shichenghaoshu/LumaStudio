@@ -146,6 +146,23 @@ class CommunityTests(unittest.TestCase):
         for query in ['offset=-1','limit=0','limit=101','offset=nan','offset=%C2%B2','offset='+('9'*100)]:
             self.assertEqual(self.call('/api/plugins?'+query)[0],422)
 
+    def test_public_origin_secure_session_and_cross_origin_rejection(self):
+        self.server.public_origin='https://community.example.test'
+        headers={'Host':'community.example.test','Origin':'https://community.example.test','X-Real-IP':'203.0.113.1'}
+        self.assertFalse(self.call('/api/config',headers=headers)[1]['localOnly'])
+        status,result,h=self.call('/api/register','POST',{'id':'remote_reader','name':'远程测试','password':'fixture-password-only','roles':['photographer']},headers=headers)
+        self.assertEqual(status,200,result);self.assertIn('; Secure',h['Set-Cookie']);self.assertIn('HttpOnly',h['Set-Cookie'])
+        from http.cookies import SimpleCookie
+        cookie=SimpleCookie();cookie.load(h['Set-Cookie']);headers['Authorization']='Bearer '+cookie['luma_session'].value
+        self.assertEqual(self.call('/api/me',headers=headers)[1]['user']['id'],'remote_reader')
+        self.assertEqual(self.call('/api/me','PUT',{'name':'新昵称','bio':'','roles':['developer']},headers=headers)[0],200)
+        self.assertEqual(self.call('/api/me','PUT',{},headers={**headers,'Origin':'https://evil.example'})[0],403)
+        self.assertEqual(self.call('/api/me',headers={**headers,'Host':'evil.example'})[0],403)
+
+    def test_public_origin_configuration_rejects_insecure_or_credential_urls(self):
+        for origin in ['http://community.example','https://user:password@community.example','https://community.example/path','https://community.example?key=bad']:
+            with self.assertRaises(ValueError):CommunityServer(('127.0.0.1',0),Path(self.temp.name)/'invalid.sqlite3',public_origin=origin)
+
     def test_unauthorized_and_review_validation_and_report_queue(self):
         pid='studio.luma.clear-portrait';self.assertEqual(self.call(f'/api/plugins/{pid}/favorite','PUT',{'value':True})[0],401)
         self.register(self.reader,'reader')

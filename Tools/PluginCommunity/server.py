@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Local creator community: python3 Tools/PluginCommunity/server.py --seed-examples."""
-import argparse, collections, hashlib, json, logging, os, re, signal, threading, time, uuid
+import argparse, collections, hashlib, ipaddress, json, logging, os, re, signal, threading, time, uuid
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +14,13 @@ from database import Database
 STATIC=Path(__file__).parent/'static'
 class CommunityServer(ThreadingHTTPServer):
     daemon_threads=True
-    def __init__(self,address,db,seed=False):
+    def __init__(self,address,db,seed=False,public_origin=None):
+        if public_origin:
+            origin=urlsplit(public_origin)
+            if origin.scheme!='https' or not origin.hostname or origin.username or origin.password or origin.path not in ['', '/'] or origin.query or origin.fragment:
+                raise ValueError('Public community requires an HTTPS origin without a path or credentials')
+            public_origin='https://'+origin.netloc
+        self.public_origin=public_origin
         self.db=Database(db);self.accounts=Accounts(self.db);self.catalog=Catalog(self.db)
         if seed:self.catalog.seed()
         self.rates=collections.defaultdict(list);self.rate_lock=threading.Lock()
@@ -22,6 +28,8 @@ class CommunityServer(ThreadingHTTPServer):
     def limit(self,key,count,period):
         now=time.monotonic()
         with self.rate_lock:
+            if len(self.rates)>10000:
+                self.rates=collections.defaultdict(list,{k:v for k,v in self.rates.items() if v and now-v[-1]<3600})
             events=[t for t in self.rates[key] if now-t<period]
             require(len(events)<count,'操作较频繁，请稍后重试','rate_limited',429)
             events.append(now);self.rates[key]=events
@@ -55,32 +63,41 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         for k,v in (headers or {}).items():self.send_header(k,v)
         self.end_headers();self.wfile.write(raw)
-    def cookie(self,token):return {'Set-Cookie':f'luma_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_SECONDS if token else 0}'}
+    def cookie(self,token):return {'Set-Cookie':f'luma_session={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_SECONDS if token else 0}'+('; Secure' if self.server.public_origin else '')}
     def dispatch(self,method):
         self.connection.settimeout(20);self.request_id=uuid.uuid4().hex;started=time.monotonic();status=500
         path=urlsplit(self.path).path
         try:
             port=self.server.server_port
             allowed={f'127.0.0.1:{port}',f'localhost:{port}'}
-            require(self.headers.get('Host') in allowed,'此服务仅接受本机地址','invalid_host',403)
+            origins={'http://'+v for v in allowed}
+            if self.server.public_origin:
+                allowed.add(urlsplit(self.server.public_origin).netloc);origins={self.server.public_origin}
+            require(self.headers.get('Host') in allowed,'社区访问地址不匹配','invalid_host',403)
             origin=self.headers.get('Origin')
-            require(origin is None or origin in {'http://'+v for v in allowed},'仅允许同源请求','invalid_origin',403)
+            require(origin is None or origin in origins,'仅允许同源请求','invalid_origin',403)
             require(method!='OPTIONS','仅支持同源访问','invalid_origin',403)
             q=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
             get=lambda key,default='':q.get(key,[default])[0]
             token=self.token();user=self.server.accounts.session(token)
+            client=self.client_address[0]
+            # Public mode runs behind the packaged loopback-only nginx proxy,
+            # which overwrites this header. Never publish the backend port.
+            if self.server.public_origin:
+                try:client=str(ipaddress.ip_address(self.headers.get('X-Real-IP',client)))
+                except ValueError:pass
             auth=lambda:self.server.accounts.session(token,required=True)
             catalog=self.server.catalog
             headers={};kind='application/json; charset=utf-8';result=None;status=200
             if method=='GET' and path=='/health':result={'status':'ok','service':'luma-plugin-community','protocol':1}
             elif method=='GET' and path=='/ready':
                 require(self.server.db.ready(),'数据库尚未就绪','not_ready',503);result={'status':'ready','migration':1}
-            elif method=='GET' and path=='/api/config':result={'schemaVersion':1,'localOnly':True,'payments':'not_connected','payouts':'not_connected','maxPackageBytes':MAX_BYTES,'host':'macOS','runtime':'declarative-v1'}
+            elif method=='GET' and path=='/api/config':result={'schemaVersion':1,'localOnly':not bool(self.server.public_origin),'payments':'not_connected','payouts':'not_connected','maxPackageBytes':MAX_BYTES,'host':'macOS','runtime':'declarative-v1'}
             elif method=='GET' and path=='/api/me':result={'user':user}
             elif method=='PUT' and path=='/api/me':
                 u=auth();result=self.server.accounts.update_profile(self.body(),u)
             elif method=='POST' and path in ['/api/register','/api/login']:
-                self.server.limit(('auth',self.client_address[0]),12,60)
+                self.server.limit(('auth',client),12,60)
                 user,newtoken=(self.server.accounts.register if path.endswith('register') else self.server.accounts.login)(self.body());headers=self.cookie(newtoken);result={'user':user}
             elif method=='POST' and path=='/api/logout':self.server.accounts.logout(token);headers=self.cookie('');result={'ok':True}
             elif method=='GET' and path=='/api/plugins':
@@ -95,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 parts=path.split('/');pid=parts[3];action=parts[4] if len(parts)>4 else ''
                 if method=='GET' and not action:result=catalog.detail(pid,user)
                 elif method=='GET' and action=='package':
-                    self.server.limit(('package',self.client_address[0]),120,60)
+                    self.server.limit(('package',client),120,60)
                     result,sha=catalog.package(pid,get('version'),get('mode','download'),user)
                     kind='application/json; charset=utf-8';headers={'X-Package-SHA256':sha,'Content-Disposition':f'attachment; filename="{pid}.lumaplugin"'}
                 elif method=='PUT' and action=='favorite':result=catalog.favorite(pid,self.body(),auth())
@@ -124,7 +141,10 @@ def main():
     parser.add_argument('--seed-examples',action='store_true');parser.add_argument('--parent-pid',type=int);args=parser.parse_args()
     if not 1024<=args.port<=65535:parser.error('端口需为 1024–65535')
     logging.basicConfig(level=logging.INFO,format='%(message)s')
-    server=CommunityServer(('127.0.0.1',args.port),args.data,args.seed_examples)
+    bind=os.environ.get('LUMA_COMMUNITY_BIND','127.0.0.1')
+    public_origin=os.environ.get('LUMA_COMMUNITY_PUBLIC_ORIGIN')
+    if bind!='127.0.0.1' and not public_origin:parser.error('非回环监听必须配置 HTTPS 公网地址并置于反向代理后')
+    server=CommunityServer((bind,args.port),args.data,args.seed_examples,public_origin)
     def stop(*_):threading.Thread(target=server.shutdown,daemon=True).start()
     signal.signal(signal.SIGINT,stop);signal.signal(signal.SIGTERM,stop)
     if args.parent_pid:

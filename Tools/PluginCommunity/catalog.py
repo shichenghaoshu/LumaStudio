@@ -21,7 +21,9 @@ class Catalog:
                 require(db.execute('SELECT 1 FROM versions WHERE plugin_id=? AND version=?',(m['id'],m['version'])).fetchone() is None,'该版本已经发布，请增加版本号','version_exists',409)
                 require(tuple(map(int,m['version'].split('.')))>tuple(map(int,existing['latest'].split('.'))),'新版本号必须高于当前版本','version_order',409)
             used=db.execute('SELECT COALESCE(sum(length(v.package)),0) FROM versions v JOIN plugins p ON p.id=v.plugin_id WHERE p.owner_id=?',(uid,)).fetchone()[0]
-            require(used+len(raw)<=200*1024*1024,'本地社区每位作者的包总大小上限为 200 MB','quota_exceeded',413)
+            require(used+len(raw)<=200*1024*1024,'每位作者的包总大小上限为 200 MB','quota_exceeded',413)
+            total=db.execute('SELECT COALESCE(sum(length(package)),0) FROM versions').fetchone()[0]
+            require(total+len(raw)<=2*1024*1024*1024,'社区投稿存储暂时已满，请联系管理员扩容','storage_full',413)
             encoded=json.dumps(m,ensure_ascii=False)
             if existing: db.execute('UPDATE plugins SET latest=?,manifest=?,updated_at=? WHERE id=?',(m['version'],encoded,now,m['id']))
             else: db.execute('INSERT INTO plugins VALUES(?,?,?,?,?,?,?)',(m['id'],uid,m['version'],encoded,now,now,int(example)))
@@ -86,7 +88,7 @@ class Catalog:
     def report(self,pid,body,user):
         keys(body,{'reason'},{'reason'});require(text(body['reason'],1000),'请填写具体问题');self.detail(pid,user)
         with self.db.connection() as db: db.execute('INSERT INTO reports(plugin_id,user_id,reason,created_at) VALUES(?,?,?,?)',(pid,user['id'],body['reason'],int(time.time())))
-        return {'status':'pending','message':'已记录到本地服务，等待社区管理员审核'}
+        return {'status':'pending','message':'已记录到社区服务，等待社区管理员审核'}
     def author(self,uid,user):
         with self.db.connection() as db:
             r=db.execute('SELECT id,name,roles,bio FROM users WHERE id=?',(uid,)).fetchone();require(r is not None,'作者不存在','not_found',404)
