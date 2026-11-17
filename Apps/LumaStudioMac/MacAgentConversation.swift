@@ -4,10 +4,11 @@ import PhotoCore
 struct MacAgentConversation: View {
     @Bindable var model: AppModel
     @State private var history=[AgentRun]()
+    @FocusState private var composerFocused: Bool
     private let steps: [(AgentStage,String)]=[(.analysis,"分析照片"),(.planning,"生成方案"),(.rendering,"执行修图"),(.evaluation,"检查效果"),(.saving,"保存记录")]
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
-            HStack{Image(systemName:"sparkles").foregroundStyle(studioAccent);Text("Luma 助手").font(.system(size:13,weight:.semibold));Spacer();Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.buttonStyle(.plain).accessibilityLabel("展开 Agent 处理过程")}.padding(17)
+            HStack{ShiguangBrand(compact:true);Text("拾光助手").font(.system(size:13,weight:.semibold));Spacer();Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.buttonStyle(StudioButtonStyle(role:.icon)).help("查看完整处理过程").accessibilityLabel("展开 Agent 处理过程")}.padding(17)
             Text(model.cloudSettings.mode == .online ? "\(model.cloudSettings.provider.title) · \(model.cloudSettings.model)" : "本地模型与照片分析").font(.system(size:10)).foregroundStyle(.secondary).padding(.horizontal,17).padding(.bottom,14)
             Divider()
             ScrollViewReader{proxy in
@@ -38,7 +39,7 @@ struct MacAgentConversation: View {
             .onChange(of:model.agentRun?.id){_,_ in Task{await reloadHistory()}}
     }
     private func prompt(_ title: String,_ text: String)->some View {
-        Button{model.instruction=text}label:{HStack{Text(title);Spacer();Image(systemName:"arrow.up.left")}.font(.system(size:11)).foregroundStyle(.secondary).padding(.vertical,10).overlay(alignment:.bottom){Color.white.opacity(0.07).frame(height:1)}}.buttonStyle(.plain)
+        Button{model.instruction=text}label:{HStack{Text(title);Spacer();Image(systemName:"arrow.up.left")}.font(.system(size:11)).foregroundStyle(.secondary).padding(.vertical,6)}.buttonStyle(StudioButtonStyle(feedback:false))
     }
     private var taskCard: some View {
         VStack(alignment:.leading,spacing:11) {
@@ -69,17 +70,17 @@ struct MacAgentConversation: View {
     }
     private var composer: some View {
         VStack(alignment:.leading,spacing:11) {
-            TextField("描述你想完成的修图…",text:$model.instruction,axis:.vertical).lineLimit(3...6).textFieldStyle(.plain).font(.system(size:12)).accessibilityLabel("修图要求")
+            TextField("描述你想完成的修图…",text:$model.instruction,axis:.vertical).lineLimit(3...6).textFieldStyle(.plain).font(.system(size:13)).focused($composerFocused).accessibilityLabel("修图要求")
             HStack {
                 Button{model.choose(.photos)}label:{Image(systemName:"plus")}.help("导入照片").accessibilityLabel("助手导入照片")
                 MacVoiceInputButton(model:model)
                 Spacer()
                 if model.agentBusy {Button("停止"){model.cancelAgent()}.font(.caption)}
-                else {Button{model.runAgent()}label:{Image(systemName:"arrow.up").font(.system(size:13,weight:.semibold)).foregroundStyle(.black).frame(width:29,height:29).background(studioAccent,in:Circle())}.buttonStyle(.plain).accessibilityLabel("发送修图要求").disabled(model.selected==nil || model.instruction.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
+                else {Button{model.runAgent()}label:{Image(systemName:"arrow.up").font(.system(size:14,weight:.semibold)).frame(width:10,height:22)}.buttonStyle(StudioButtonStyle(role:.primary)).keyboardShortcut(.return,modifiers:.command).help("发送修图要求 ⌘↩").accessibilityLabel("发送修图要求").disabled(model.selected==nil || model.instruction.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}
+            }.buttonStyle(StudioButtonStyle(role:.icon)).foregroundStyle(.secondary)
             Toggle("自动检查并修正",isOn:$model.automaticCorrection).font(.system(size:10)).toggleStyle(.checkbox).disabled(model.agentBusy)
             Text("AI 已锁定 \(model.recipe.document.lockedParameters.count) 项 · 原片保留").font(.system(size:9)).foregroundStyle(.tertiary)
-        }.padding(14).background(Color(white:0.12),in:RoundedRectangle(cornerRadius:10)).padding(12)
+        }.padding(16).background(Color(white:0.13),in:RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).strokeBorder(composerFocused ? studioAccent.opacity(0.65) : Color.white.opacity(0.08),lineWidth:1)).padding(12)
     }
     private func reloadHistory() async {
         guard let assetID=model.selectedID else{history=[];return}

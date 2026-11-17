@@ -54,6 +54,7 @@ import PhotoCore
     var agentInstruction=""
     var agentFailure: String?
     var automaticCorrection=true
+    var editorAssistantOpen=false
     var useLocalModel=true
     var modelManagerPresented=false
     var integrationsPresented=false
@@ -757,7 +758,7 @@ import PhotoCore
             return VoiceReceipt(id:command.id,status:"running",message:"已启动当前照片的修图处理")
         }
         voiceInbox.append(command)
-        return VoiceReceipt(id:command.id,status:"awaiting_review",message:"已进入 LumaStudio 的语音待处理列表")
+        return VoiceReceipt(id:command.id,status:"awaiting_review",message:"已进入拾光的语音待处理列表")
     }
     func useVoiceCommand(_ command: VoiceCommand,run: Bool) {
         guard !agentBusy else { return };instruction=command.text;voiceInbox.removeAll{$0.id==command.id}
