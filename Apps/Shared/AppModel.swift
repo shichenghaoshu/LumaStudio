@@ -66,7 +66,8 @@ import PhotoCore
     var cloudTesting=false
     var cloudKeySaved=false
     var cloudSessionKeyAvailable=false
-    @ObservationIgnored private var sessionCloudKey: (account:String,value:String)?
+    var cloudCredentialBusy=false
+    @ObservationIgnored private var sessionCloudKey: (account:String,value:String,persisted:Bool)?
     var voiceInbox: [VoiceCommand]=[]
     var automaticVoiceExecution=false
     var allowAppleOnlineSpeech=false
@@ -640,29 +641,61 @@ import PhotoCore
     private func updateAgentStatus(_ status: String,assetID: UUID,generation: UUID) { if selectedID==assetID,agentGeneration==generation { agentStatus=status } }
     func cancelAgent() { agentStatus="正在停止，等待当前操作结束…";agentTask?.cancel() }
     func refreshIntegrationCredentials() {
-        cloudSessionKeyAvailable=sessionCloudKey?.account==cloudSettings.credentialAccount
-        do {cloudKeySaved=try IntegrationCredentials.read(cloudSettings.credentialAccount) != nil}
-        catch {cloudKeySaved=false;cloudConnectionStatus=error.localizedDescription}
-        xiaozhiEndpointSaved=((try? IntegrationCredentials.read("xiaozhi.mcp.endpoint")) ?? nil) != nil
+        let account=cloudSettings.credentialAccount
+        if let cached=sessionCloudKey,cached.account==account {cloudKeySaved=cached.persisted;cloudSessionKeyAvailable = !cached.persisted;return}
+        cloudKeySaved=false;cloudSessionKeyAvailable=false
+        Task {
+            do {
+                let key=try await Task.detached {try IntegrationCredentials.read(account)}.value
+                guard cloudSettings.credentialAccount==account,sessionCloudKey?.account != account else {return}
+                if let key {sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudConnectionStatus="已自动读取保存的密钥，无需重复输入"}
+            } catch {if cloudSettings.credentialAccount==account {cloudConnectionStatus=error.localizedDescription}}
+            xiaozhiEndpointSaved=await Task.detached {((try? IntegrationCredentials.read("xiaozhi.mcp.endpoint")) ?? nil) != nil}.value
+        }
+    }
+    func authorizeSavedCloudKey() {
+        guard !cloudCredentialBusy else {return}
+        let account=cloudSettings.credentialAccount;cloudCredentialBusy=true
+        cloudConnectionStatus="请在 macOS 系统窗口授权读取；无需重新输入 API 密钥"
+        Task {
+            defer{cloudCredentialBusy=false}
+            do {
+                let key=try await Task.detached {try IntegrationCredentials.read(account,allowAuthenticationUI:true)}.value
+                guard cloudSettings.credentialAccount==account else {return}
+                guard let key else {cloudConnectionStatus="此服务尚未保存密钥，请填写一次并点击“保存并记住”";return}
+                sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudSessionKeyAvailable=false
+                cloudConnectionStatus="已读取保存的密钥；后续修图自动复用，无需重新输入"
+            } catch {if cloudSettings.credentialAccount==account {cloudConnectionStatus=error.localizedDescription}}
+        }
     }
     private func cloudKey(for settings: CloudSettings) async throws -> String? {
         if let session=sessionCloudKey,session.account==settings.credentialAccount {return session.value}
         let account=settings.credentialAccount
-        return try await Task.detached {try IntegrationCredentials.read(account)}.value
+        let key=try await Task.detached {try IntegrationCredentials.read(account)}.value
+        if let key,cloudSettings.credentialAccount==account {sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudSessionKeyAvailable=false}
+        return key
     }
-    func useCloudKeyForSession(_ value: String) {
+    @discardableResult func useCloudKeyForSession(_ value: String) -> Bool {
         do {
             _=try cloudSettings.validate();let key=value.trimmingCharacters(in:.whitespacesAndNewlines)
             guard !key.isEmpty,key.count<=8192,!key.contains("\n"),!key.contains("\r") else {throw LumaError.unsupported("密钥格式无效")}
-            sessionCloudKey=(cloudSettings.credentialAccount,key);cloudSessionKeyAvailable=true
+            sessionCloudKey=(cloudSettings.credentialAccount,key,false);cloudKeySaved=false;cloudSessionKeyAvailable=true
             cloudConnectionStatus="本次会话密钥已就绪；退出应用后清除，尚未测试"
-        } catch {cloudConnectionStatus=error.localizedDescription}
+            return true
+        } catch {cloudConnectionStatus=error.localizedDescription;return false}
     }
     func saveCloudKey(_ value: String) {
-        useCloudKeyForSession(value)
-        guard cloudSessionKeyAvailable,let session=sessionCloudKey else {return}
-        do {try IntegrationCredentials.save(session.value,account:session.account);cloudKeySaved=true;cloudConnectionStatus="密钥已保存在系统钥匙串，尚未测试" }
-        catch {cloudConnectionStatus="本次会话可用；持久保存未完成："+error.localizedDescription}
+        guard !cloudCredentialBusy else {return}
+        guard useCloudKeyForSession(value),let session=sessionCloudKey else {return}
+        cloudCredentialBusy=true;cloudConnectionStatus="正在保存；如系统弹窗，请完成一次授权"
+        Task {
+            defer{cloudCredentialBusy=false}
+            do {
+                try await Task.detached {try IntegrationCredentials.save(session.value,account:session.account,allowAuthenticationUI:true)}.value
+                guard cloudSettings.credentialAccount==session.account else {return}
+                sessionCloudKey=(session.account,session.value,true);cloudKeySaved=true;cloudSessionKeyAvailable=false;cloudConnectionStatus="密钥已记住，下次启动自动读取，无需重复填写"
+            } catch {if cloudSettings.credentialAccount==session.account {cloudConnectionStatus="本次会话可用；持久保存未完成："+error.localizedDescription}}
+        }
     }
     func removeCloudKey() {
         sessionCloudKey=nil;cloudSessionKeyAvailable=false

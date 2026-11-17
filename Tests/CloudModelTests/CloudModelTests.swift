@@ -19,6 +19,25 @@ private actor FixtureTransport: ModelHTTPTransport {
     func last()->URLRequest? { requests.last }
 }
 final class CloudModelTests: XCTestCase {
+    func testSavedCredentialPersistsWithoutRepeatedInput() throws {
+        let env=ProcessInfo.processInfo.environment
+        let account=env["LUMA_CREDENTIAL_PROBE_ACCOUNT"] ?? "qa.persistence."+UUID().uuidString
+        guard account.hasPrefix("qa.persistence.") else {return XCTFail("Probe must use a disposable account")}
+        let fixture="fixture-value-for-keychain-persistence-only"
+        if env["LUMA_CREDENTIAL_PROBE_PHASE"]=="write" {
+            try IntegrationCredentials.save(fixture,account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+        } else if env["LUMA_CREDENTIAL_PROBE_PHASE"]=="read" {
+            defer {try? IntegrationCredentials.remove(account)}
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+        } else {
+            defer {try? IntegrationCredentials.remove(account)}
+            try IntegrationCredentials.save(fixture,account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+            try IntegrationCredentials.save(fixture+"-updated",account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture+"-updated")
+        }
+    }
     func testDeepSeekDisablesThinkingForBoundedJSONButOtherProvidersAreUnchanged() async throws {
         for deepseek in [false,true] {
             var settings=configuration();if deepseek{settings.provider = .deepseek;settings.baseURL="https://api.deepseek.com";settings.model="deepseek-flash"}
