@@ -105,3 +105,24 @@ work/plugin-ecosystem/packaging-venv/bin/python Scripts/build_plugin_service.py
 本地完整 Release 回归 **161 项通过，0 失败、0 跳过**，包含原有相机、RAW、美颜、色彩、批量、模型和语音模块；新增插件测试覆盖四类包、字段/资源校验、场景限制、锁和照片状态、安装版本冲突/回退/篡改、商业授权以及实际照片执行。独立社区接口 **7 项通过**，语音 MCP **3 项通过**。真实人像完成 **8 张 GPU 插件预览与 2 张批量导出**；这些数据证明执行与状态保护，不代表审美得分或厂商匹配率。
 
 Mac Release 构建通过；独立打包服务已实际验证健康接口、四类目录和静态页面。对应日志保存在本地 `Artifacts/PluginEcosystem` 与 `work/plugin-ecosystem`，实际界面验收与最终包摘要单独记录。源码 CI 在 GitHub 上执行，外部素材/大模型不随仓库提供，CI 的跳过范围与本地完整素材回归不同。
+
+## 0.6.1 社区补齐
+
+- 点击左下角账号，在创作者主页编辑昵称、介绍和身份。历史插件包保持不可变，作者资料更新不会重写已发布的包。
+- 在作品详情点击作者，可关注或取消关注；“关注动态”按所选排序显示关注作者的作品，支持类型筛选、搜索和翻页。
+- 创作者主页可查看全部作品，作品列表每页 24 个，不再截断在前 100 个。
+- 窄屏也保留登录与投稿入口。
+- `PUT /api/me` 修改当前用户资料（name/roles/bio）；`PUT /api/authors/{id}/follow` 接收 `{ "value": true }`；作品列表新增 `following=1`、`author`、`offset`、`limit`，返回 total/offset/limit/hasMore。所有账号操作仍要求同源会话，关注幂等、不可关注自己。
+- 本版本仍为本机社区。公网托管、支付与结算未配置。
+
+## 0.6.2 在线社区
+
+线上入口：https://lumastudio.47-100-139-168.sslip.io 。Mac 创作中心顶部可切换“在线社区 / 本机社区”，两者账号与投稿数据库独立。在线投稿、资料、收藏、评分和关注保存在服务器；原片与试用渲染留在 Mac。已有本机投稿不会自动公开。
+
+部署配置位于 `Deploy/community`：独立 Python 3.12 容器、非 root 进程、只读根文件系统、回环端口 18791，Nginx 提供 HTTPS。生产模式通过 `LUMA_COMMUNITY_PUBLIC_ORIGIN` 限定 Host/Origin，并为会话设置 Secure/HttpOnly/SameSite。代理必须覆盖 X-Real-IP；后端端口不能直接公开。
+
+运行目录 `/opt/lumastudio-community`；数据库 `/opt/lumastudio-community/data/community.sqlite3`。Docker restart 策略保持运行，Certbot 现有定时器续期证书并在成功后重载 Nginx。每天创建一致性数据库备份，保留最近 7 份于 data/backups（同机备份，尚无异地备份）。
+
+更新前先执行备份，用新版本镜像替换社区容器；保留 data 目录及旧镜像以便回退。仅社区的 nginx 配置位于 `/etc/nginx/conf.d/luma-community.conf`，不要覆盖其他站点配置。
+
+当前是在线社区预览版。商业价格与使用许可可展示，真实收款、订单授权、分账和提现仍未接通；举报进入待处理队列，尚无完整运营审核后台或邮件找回密码。

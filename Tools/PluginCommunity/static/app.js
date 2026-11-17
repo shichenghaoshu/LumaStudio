@@ -1,13 +1,13 @@
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
 const kinds={lut:'LUT',recipe:'调色配方',localAdjustment:'局部工具',aiTool:'AI 工具'},icons={lut:'◐',recipe:'≋',localAdjustment:'◌',aiTool:'✧'},roles={photographer:'摄影师',colorist:'调色师',developer:'开发者'};
-const state={user:null,nav:'explore',kind:'',selected:null,items:[],installed:[],native:!!window.webkit?.messageHandlers?.lumaPlugins,authRegister:false,file:null,package:null,preview:null,busy:false,plannerMode:'current',requests:{},request:0,detailRequest:0};
+const state={user:null,nav:'explore',kind:'',selected:null,items:[],installed:[],native:!!window.webkit?.messageHandlers?.lumaPlugins,authRegister:false,file:null,package:null,preview:null,busy:false,plannerMode:'current',requests:{},request:0,detailRequest:0,offset:0,total:0,hasMore:false,author:''};
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=l=>l.type==='commercial'?`${l.currency==='CNY'?'¥':'$'}${(l.priceCents/100).toFixed(2)} · 商业授权`:l.type==='openSource'?`开源 · ${l.spdx}`:'免费 · 作者许可';
 function notice(message=''){ $('#notice').textContent=message; }
 async function api(path,options={}){
   const response=await fetch(path,{...options,credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})}});
-  let data;try{data=await response.json();}catch{throw new Error('服务返回内容无效，请检查本机社区服务');}
+  let data;try{data=await response.json();}catch{throw new Error('服务返回内容无效，请检查社区服务');}
   if(!response.ok)throw new Error(data.error?.message||`服务请求失败（${response.status}）`);
   return data;
 }
@@ -25,19 +25,24 @@ window.lumaHostResult=result=>{
   if(state.nav==='installed')load();else if(state.selected)renderDetail(state.selected);
 };
 function account(){ $('#account').textContent=state.user?`${state.user.name} · ${state.user.id}`:'登录 / 成为创作者'; }
-async function load(){
+async function load(keepPage=false){
+  if(keepPage!==true)state.offset=0;
+  $('#pagination').hidden=true;
   const request=++state.request;notice();
   if(state.nav==='installed'){
     if(!state.native){$('#results').innerHTML='<p class="empty">已安装列表由 Mac 编辑器维护。<br>请从编辑器打开创作中心。</p>';$('#detail').innerHTML='';return;}
     state.items=state.installed.map(i=>({manifest:i.manifest,installed:true,sha256:i.sha256,rating:{count:0,average:null}}));renderList();return;
   }
-  if(['favorites','mine'].includes(state.nav)&&!state.user){$('#results').innerHTML='<p class="empty">登录后查看你的收藏与作品。</p>';$('#detail').innerHTML='';return;}
+  if(['favorites','mine','following'].includes(state.nav)&&!state.user){$('#results').innerHTML='<p class="empty">登录后查看你的收藏与作品。</p>';$('#detail').innerHTML='';return;}
   $('#results').innerHTML='<p class="empty">正在读取作品…</p>';
   try{
-    const q=new URLSearchParams({q:$('#search').value,kind:state.kind,sort:$('#sort').value});
+    const q=new URLSearchParams({q:$('#search').value,kind:state.kind,sort:$('#sort').value,offset:state.offset,limit:24});
+    if(state.author)q.set('author',state.author);
+    if(state.nav==='following')q.set('following','1');
     if(state.nav==='favorites')q.set('favorites','1');if(state.nav==='mine')q.set('mine','1');
     const result=await api('/api/plugins?'+q);if(request!==state.request)return;
-    state.items=result.items;renderList();
+    state.items=result.items;state.total=result.total;state.hasMore=result.hasMore;renderList();
+    $('#pagination').hidden=result.total===0;$('#page-status').textContent=`${state.offset+1}–${state.offset+result.items.length} / ${result.total} 个作品`;$('#previous-page').disabled=state.offset===0;$('#next-page').disabled=!result.hasMore;
   }catch(error){if(request!==state.request)return;$('#results').innerHTML='<p class="empty">无法读取作品，请启动社区服务后刷新。</p>';notice(error.message);}
 }
 function renderList(){
@@ -73,15 +78,29 @@ function renderDetail(item){
   if($('#uninstall'))$('#uninstall').onclick=()=>host('uninstall',{id:m.id});
   if($('#before-after')){const b=$('#before-after'),image=$('.preview img');const reset=()=>{image.src=p.after;$('#preview-label').textContent='试用效果 · 尚未应用';};b.onpointerdown=()=>{image.src=p.before;$('#preview-label').textContent='原图';};b.onpointerup=reset;b.onpointerleave=reset;b.onblur=reset;}
   if($('#rating-form'))$('#rating-form').onsubmit=async e=>{e.preventDefault();try{const f=e.currentTarget;state.selected=await api(`/api/plugins/${m.id}/rating`,{method:'PUT',body:JSON.stringify({score:Number(f.elements.score.value),comment:f.elements.comment.value})});renderDetail(state.selected);notice('反馈已保存');}catch(error){notice(error.message);}};
-  if($('#report'))$('#report').onclick=()=>{const reason=prompt('请描述资源、效果或许可问题（会记录到本机社区）');if(reason)api(`/api/plugins/${m.id}/report`,{method:'POST',body:JSON.stringify({reason})}).then(r=>notice(r.message)).catch(e=>notice(e.message));};
+  if($('#report'))$('#report').onclick=()=>{const reason=prompt('请描述资源、效果或许可问题（会记录到当前社区）');if(reason)api(`/api/plugins/${m.id}/report`,{method:'POST',body:JSON.stringify({reason})}).then(r=>notice(r.message)).catch(e=>notice(e.message));};
 }
 function run(action){if(state.busy)return;if(['apply','agent'].includes(action))state.preview=null;state.busy=true;notice(action==='batch'?'正在准备已选照片的独立输出…':'正在执行…');const request=$('#plugin-request')?.value||'';host(action,{id:state.selected.manifest.id,request,localRules:state.plannerMode==='rules'});}
 function safeURL(value){try{const u=new URL(value);return u.protocol==='https:'?escape(u.href):'#';}catch{return '#';}}
 function needUser(){if(state.user)return true;$('#auth-dialog').showModal();return false;}
 function download(value,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
-async function showAuthor(id){try{const a=await api('/api/authors/'+id);$('#profile-content').innerHTML=`<h2>${escape(a.name)}</h2><p>${a.roles.map(r=>roles[r]).join(' / ')}</p><p>${escape(a.bio||'这位创作者还没有填写介绍。')}</p>${a.plugins.map(p=>`<div class="profile-line">${escape(p.manifest.name)}<p class="hint">${escape(money(p.manifest.license))} · ${p.rating.count?`${p.rating.average} / 5`:'暂无评分'}</p></div>`).join('')}<p class="hint">作品展示使用真实投稿记录。收益与结算服务尚未连接，当前没有可结算余额。</p>${state.user?.id===id?'<button id="logout" class="quiet">退出登录</button>':''}`;$('#profile-dialog').showModal();if($('#logout'))$('#logout').onclick=async()=>{await api('/api/logout',{method:'POST',body:'{}'});state.user=null;account();$('#profile-dialog').close();load();};}catch(e){notice(e.message);}}
+async function showAuthor(id){
+  try{
+    const a=await api('/api/authors/'+id),own=state.user?.id===id;
+    $('#profile-content').innerHTML=`<h2>${escape(a.name)}</h2><p>${a.roles.map(r=>roles[r]).join(' / ')}</p><p class="profile-bio">${escape(a.bio||'这位创作者还没有填写介绍。')}</p><p>${a.pluginCount} 个作品 · ${a.followers} 位关注者 · 关注 ${a.followingCount} 人</p>${!own?`<button id="follow-author" class="primary">${a.following?'取消关注':'关注创作者'}</button>`:''}<button id="author-works" class="quiet">查看全部作品</button>${a.plugins.map(p=>`<button class="profile-line" data-profile-plugin="${escape(p.manifest.id)}">${escape(p.manifest.name)}<span class="hint">${escape(money(p.manifest.license))} · ${p.rating.count?`${p.rating.average} / 5`:'暂无评分'}</span></button>`).join('')}${own?`<form id="profile-form"><h3>编辑创作者资料</h3><label>昵称<input name="name" required maxlength="80" value="${escape(a.name)}"></label><label>个人介绍<textarea name="bio" rows="3" maxlength="600">${escape(a.bio)}</textarea></label><fieldset><legend>创作身份</legend>${Object.entries(roles).map(([r,label])=>`<label><input type="checkbox" name="profileRole" value="${r}" ${a.roles.includes(r)?'checked':''}>${label}</label>`).join('')}</fieldset><button class="primary">保存资料</button></form><button id="logout" class="quiet">退出登录</button>`:''}<p id="profile-status" role="status" class="hint"></p><p class="hint">作品与关注数来自当前社区真实记录。收益与结算尚未接通。</p>`;
+    if(!$('#profile-dialog').open)$('#profile-dialog').showModal();
+    if($('#follow-author'))$('#follow-author').onclick=async()=>{if(!state.user){$('#profile-dialog').close();needUser();return;}try{await api('/api/authors/'+id+'/follow',{method:'PUT',body:JSON.stringify({value:!a.following})});await showAuthor(id);if(state.nav==='following')load();}catch(e){$('#profile-status').textContent=e.message;}};
+    const openWorks=async()=>{state.author=id;state.nav='author';state.selected=null;$('#search').value='';state.kind='';$$('[data-kind]').forEach(b=>b.classList.toggle('active',b.dataset.kind===''));$$('[data-nav]').forEach(b=>b.classList.remove('active'));$('#page-title').textContent=a.name+' 的作品';$('#profile-dialog').close();await load();};
+    $('#author-works').onclick=openWorks;
+    $$('[data-profile-plugin]').forEach(b=>b.onclick=async()=>{await openWorks();await select(b.dataset.profilePlugin);});
+    if($('#profile-form'))$('#profile-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,button=f.querySelector('button');button.disabled=true;try{const result=await api('/api/me',{method:'PUT',body:JSON.stringify({name:f.elements.name.value,bio:f.elements.bio.value,roles:$$('input[name=profileRole]:checked').map(c=>c.value)})});state.user=result.user;account();await showAuthor(id);$('#profile-status').textContent='资料已保存。已发布插件包保留发布时的作者信息。';}catch(error){$('#profile-status').textContent=error.message;}finally{button.disabled=false;}};
+    if($('#logout'))$('#logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'});state.user=null;account();$('#profile-dialog').close();load();}catch(e){$('#profile-status').textContent=e.message;}};
+  }catch(e){notice(e.message);}
+}
+$('#previous-page').onclick=()=>{state.offset=Math.max(0,state.offset-24);load(true);};
+$('#next-page').onclick=()=>{if(state.hasMore){state.offset+=24;load(true);}};
 $$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).close());
-$$('[data-nav]').forEach(b=>b.onclick=()=>{state.nav=b.dataset.nav;$$('[data-nav]').forEach(x=>x.classList.toggle('active',x===b));$('#page-title').textContent=b.firstChild.textContent;state.selected=null;load();if(state.nav==='installed')host('installed');});
+$$('[data-nav]').forEach(b=>b.onclick=()=>{state.nav=b.dataset.nav;state.author='';$$('[data-nav]').forEach(x=>x.classList.toggle('active',x===b));$('#page-title').textContent=b.firstChild.textContent;state.selected=null;load();if(state.nav==='installed')host('installed');});
 $$('[data-kind]').forEach(b=>b.onclick=()=>{state.kind=b.dataset.kind;$$('[data-kind]').forEach(x=>x.classList.toggle('active',x===b));load();});
 let searchTimer;$('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(load,220);};$('#sort').onchange=load;$('#refresh').onclick=()=>{if(state.native)host('installed');load();};
 $('#account').onclick=()=>state.user?showAuthor(state.user.id):$('#auth-dialog').showModal();
@@ -103,8 +122,8 @@ async function draft(){
   return {schemaVersion:1,manifest:m,payload,assets};
 }
 $('#download-draft').onclick=async()=>{try{const p=await draft();if(state.native){host('exportDraft',{package:p});return;}download(p,p.manifest.id+'.lumaplugin');$('#publish-error').textContent='已导出草稿；发布时会校验完整协议。';}catch(e){$('#publish-error').textContent=e.message;}};
-$('#publish-form').onsubmit=async e=>{e.preventDefault();$('#publish-submit').disabled=true;$('#publish-error').textContent='';try{if(!state.user)throw new Error('请先登录');const p=await draft();const result=await api('/api/plugins',{method:'POST',body:state.package?state.file.text:JSON.stringify(p)});$('#publish-dialog').close();state.selected=result;state.nav='mine';$$('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav==='mine'));$('#page-title').textContent='我的作品';await load();notice('作品已通过服务端校验并发布到本机社区');}catch(error){$('#publish-error').textContent=error.message;}finally{$('#publish-submit').disabled=false;}};
-(async()=>{try{state.user=(await api('/api/me')).user;account();if(state.native)host('installed');await load();}catch(error){notice(error.message);}})();
+$('#publish-form').onsubmit=async e=>{e.preventDefault();$('#publish-submit').disabled=true;$('#publish-error').textContent='';try{if(!state.user)throw new Error('请先登录');const p=await draft();const result=await api('/api/plugins',{method:'POST',body:state.package?state.file.text:JSON.stringify(p)});$('#publish-dialog').close();state.selected=result;state.nav='mine';state.author='';$$('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav==='mine'));$('#page-title').textContent='我的作品';await load();notice('作品已通过服务端校验并发布到当前社区');}catch(error){$('#publish-error').textContent=error.message;}finally{$('#publish-submit').disabled=false;}};
+(async()=>{try{const config=await api('/api/config');if(!config.localOnly){$('#community-storage').innerHTML='在线社区 · 创作者共享作品<br>商业收款与分账尚未接通';$('#account-storage').textContent='账号与加盐密码摘要保存在社区服务器；插件投稿对社区用户可见。照片试用在 Mac 本地完成。';}state.user=(await api('/api/me')).user;account();if(state.native)host('installed');await load();}catch(error){notice(error.message);}})();
 
 function updateWizard(){
   const f=$('#publish-form'),kind=f.elements.kind.value,type=f.elements.licenseType.value;

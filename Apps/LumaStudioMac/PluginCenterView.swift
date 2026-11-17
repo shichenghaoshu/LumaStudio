@@ -2,8 +2,7 @@ import SwiftUI
 import WebKit
 import PhotoCore
 
-/// The marketplace shares its web UI with browser users. Only this fixed loopback
-/// origin may ask the native host to install or process a photograph.
+/// Only the selected, fixed community origin may invoke the native plugin host.
 struct PluginCenterView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -11,13 +10,14 @@ struct PluginCenterView: View {
     @State private var ready=false
     @State private var status="正在连接本机社区…"
     @State private var generation=UUID()
-    private let endpoint=URL(string:"http://127.0.0.1:8791")!
+    @AppStorage("luma.community.online") private var online=true
+    private var endpoint: URL {URL(string:online ? "https://lumastudio.47-100-139-168.sslip.io" : "http://127.0.0.1:8791")!}
     var body: some View {
         VStack(spacing:0) {
             HStack {
                 Label("创作中心",systemImage:"square.stack.3d.up").font(.headline)
                 Spacer()
-                Text("本机社区").font(.caption).foregroundStyle(.secondary)
+                Picker("社区位置",selection:$online) {Text("在线社区").tag(true);Text("本机社区").tag(false)}.pickerStyle(.segmented).frame(width:200)
                 Button("关闭"){dismiss()}.keyboardShortcut(.cancelAction)
             }.padding(.horizontal,20).frame(height:49)
             Divider()
@@ -27,22 +27,24 @@ struct PluginCenterView: View {
                     Image(systemName:"square.stack.3d.up").font(.system(size:44,weight:.ultraLight)).foregroundStyle(studioAccent)
                     Text("创作、分享与使用修图工具").font(.title2)
                     Text(status).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth:520)
-                    Button("启动 / 重新连接本机社区"){Task{await connect()}}.buttonStyle(.borderedProminent)
+                    Button("重新连接社区"){Task{await connect()}}.buttonStyle(.borderedProminent)
                     Text("照片由 Mac 本地处理。投稿只上传插件包。\n收款和创作者分账服务尚未连接。").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.frame(maxWidth:.infinity,maxHeight:.infinity)
             }
         }.frame(minWidth:970,idealWidth:1120,minHeight:650,idealHeight:760).background(Color(white:0.07))
-        .task {await connect()}
+        .task(id:online) {await connect()}
     }
     private func connect() async {
-        do {try await service.ensureStarted(endpoint:endpoint);ready=true;generation=UUID()}
-        catch {status=error.localizedDescription}
+        ready=false;status=online ? "正在连接在线社区…" : "正在连接本机社区…"
+        do {try await service.ensureStarted(endpoint:endpoint);try Task.checkCancellation();ready=true;generation=UUID()}
+        catch is CancellationError {} catch {status=error.localizedDescription}
     }
 }
 @MainActor @Observable final class PluginCommunityService {
     private var process: Process?
     func ensureStarted(endpoint: URL) async throws {
         if await healthy(endpoint) {return}
+        guard endpoint.host=="127.0.0.1" else {throw LumaError.unsupported("在线社区暂时无法连接，请检查网络后重试；也可以切换到本机社区。")}
         guard let resources=Bundle.main.resourceURL else {throw LumaError.notConnected}
         let bundled=resources.appendingPathComponent("PluginCommunity/LumaCommunity")
         let task=Process()
@@ -64,7 +66,7 @@ struct PluginCenterView: View {
         throw LumaError.unsupported("本机社区启动失败，请检查服务日志或端口 8791 是否被占用。")
     }
     private func healthy(_ endpoint: URL) async -> Bool {
-        var request=URLRequest(url:endpoint.appendingPathComponent("health"));request.timeoutInterval=1
+        var request=URLRequest(url:endpoint.appendingPathComponent("health"));request.timeoutInterval=endpoint.scheme=="https" ? 8 : 1
         guard let (data,response)=try? await URLSession.shared.data(for:request),(response as? HTTPURLResponse)?.statusCode==200,
               let result=try? JSONSerialization.jsonObject(with:data) as? [String:Any] else {return false}
         return result["service"] as? String=="luma-plugin-community" && result["protocol"] as? Int==1
@@ -151,7 +153,7 @@ struct PluginCommunityWebView: NSViewRepresentable {
             let config=URLSessionConfiguration.ephemeral;config.httpShouldSetCookies=false
             let session=URLSession(configuration:config);defer{session.finishTasksAndInvalidate()}
             let (data,response)=try await session.data(for:request)
-            guard let http=response as? HTTPURLResponse,http.url?.host==endpoint.host,http.url?.port==endpoint.port else {throw LumaError.notConnected}
+            guard let http=response as? HTTPURLResponse,sameOrigin(http.url) else {throw LumaError.notConnected}
             guard http.statusCode==200 else {
                 let error=(try? JSONSerialization.jsonObject(with:data) as? [String:Any])?["error"] as? [String:Any]
                 throw LumaError.unsupported(error?["message"] as? String ?? "无法下载插件")

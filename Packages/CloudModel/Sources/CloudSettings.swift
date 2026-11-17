@@ -46,13 +46,14 @@ public enum IntegrationCredentials {
         // systems. Never let an ad-hoc build wait indefinitely for a system prompt.
         var previous: DarwinBoolean=true
         SecKeychainGetUserInteractionAllowed(&previous)
-        if !allowUI {SecKeychainSetUserInteractionAllowed(false)}
-        defer{if !allowUI {SecKeychainSetUserInteractionAllowed(previous.boolValue)}}
+        SecKeychainSetUserInteractionAllowed(allowUI)
+        defer{SecKeychainSetUserInteractionAllowed(previous.boolValue)}
         #endif
         return try operation()
     }
     private static func failure(_ status: OSStatus)->LumaError {
-        if status==errSecInteractionNotAllowed || status==errSecAuthFailed {return .unsupported("钥匙串需要系统授权；可填写密钥并选择“本次会话使用”继续")}
+        if status==errSecInteractionNotAllowed || status==errSecAuthFailed {return .unsupported("已保存的密钥需要系统授权，请在接入设置点击“授权读取已存密钥”，无需重新输入 API 密钥")}
+        if status==errSecUserCanceled {return .unsupported("系统授权已取消；已保存密钥仍保留，可稍后重新授权")}
         return .unsupported("系统钥匙串访问未完成（\(status)）")
     }
     public static func read(_ account: String,allowAuthenticationUI: Bool=false) throws -> String? {try access(allowAuthenticationUI) {
@@ -63,7 +64,7 @@ public enum IntegrationCredentials {
         guard status==errSecSuccess,let data=result as? Data else { throw failure(status) }
         return String(data:data,encoding:.utf8)
     } }
-    public static func save(_ value: String,account: String) throws {try access {
+    public static func save(_ value: String,account: String,allowAuthenticationUI: Bool=false) throws {try access(allowAuthenticationUI) {
         guard !value.isEmpty,value.count<=8192,!value.contains("\n"),!value.contains("\r") else { throw LumaError.unsupported("密钥或连接地址格式无效") }
         let q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account]
         let data=Data(value.utf8),status=SecItemUpdate(q as CFDictionary,[kSecValueData as String:data] as CFDictionary)
@@ -72,7 +73,7 @@ public enum IntegrationCredentials {
             let added=SecItemAdd(add as CFDictionary,nil);guard added==errSecSuccess else { throw failure(added) }
         } else if status != errSecSuccess { throw failure(status) }
     } }
-    public static func remove(_ account: String) throws {try access {
+    public static func remove(_ account: String,allowAuthenticationUI: Bool=false) throws {try access(allowAuthenticationUI) {
         let q: [String:Any]=[kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account]
         let status=SecItemDelete(q as CFDictionary)
         guard status==errSecSuccess || status==errSecItemNotFound else { throw failure(status) }

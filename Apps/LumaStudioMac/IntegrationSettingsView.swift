@@ -29,6 +29,7 @@ struct IntegrationSettingsView: View {
                 model.cloudSettings.style=provider == .openAI ? .responses : .chatCompletions
                 apiKey="";model.refreshIntegrationCredentials()
             }
+            .onChange(of:model.cloudSettings.baseURL) { _,_ in apiKey="";model.refreshIntegrationCredentials() }
     }
     private var cloudSettings: some View {
         VStack(alignment:.leading,spacing:16) {
@@ -40,19 +41,24 @@ struct IntegrationSettingsView: View {
             Picker("API 格式",selection:$model.cloudSettings.style) { Text("Chat Completions 兼容接口").tag(CloudAPIStyle.chatCompletions);Text("OpenAI Responses").tag(CloudAPIStyle.responses) }
             HStack {
                 SecureField(model.cloudKeySaved ? "输入新密钥以替换已保存密钥" : "API 密钥，仅保存在系统钥匙串",text:$apiKey).textFieldStyle(.roundedBorder).accessibilityLabel("在线模型 API 密钥")
-                Button("保存密钥") { model.saveCloudKey(apiKey);apiKey="" }.disabled(apiKey.isEmpty)
+                Button("保存并记住") { model.saveCloudKey(apiKey);apiKey="" }.disabled(apiKey.isEmpty || model.cloudCredentialBusy)
             }
             HStack {
                 Label(model.cloudSessionKeyAvailable ? "本次会话密钥可用" : (model.cloudKeySaved ? "钥匙串密钥可用" : "未读取到可用密钥"),systemImage:model.cloudKeySaved || model.cloudSessionKeyAvailable ? "key.fill" : "key").font(.caption).foregroundStyle(.secondary)
                 Button("本次会话使用") {model.useCloudKeyForSession(apiKey);apiKey=""}.disabled(apiKey.isEmpty).font(.caption)
                 Spacer();if model.cloudKeySaved { Button("移除密钥",role:.destructive){model.removeCloudKey()}.font(.caption) }
             }
+            HStack {
+                Button("授权读取已存密钥"){model.authorizeSavedCloudKey()}.disabled(model.cloudCredentialBusy)
+                if model.cloudCredentialBusy {ProgressView().controlSize(.small)}
+            }
+            Text("密钥只需保存一次，后续自动读取。若旧版钥匙串要求授权，点击上方按钮并在系统窗口允许；无需重新填写 API 密钥。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             Toggle("附带不超过 512 像素的照片预览",isOn:$model.cloudSettings.attachPreview).font(.callout)
             if model.cloudSettings.attachPreview { Text("开始在线处理时，这张小预览会上传到你填写的服务商；请使用支持图片输入的模型。预览不含原片 EXIF 信息。").font(.caption).foregroundStyle(studioAccent).fixedSize(horizontal:false,vertical:true) }
             Toggle("在线请求失败时，使用本地模型继续",isOn:$model.cloudSettings.fallbackToLocal).font(.callout)
             HStack { Button("测试在线连接"){model.testCloudConnection()}.disabled(model.cloudTesting || (!model.cloudKeySaved && !model.cloudSessionKeyAvailable));if model.cloudTesting { ProgressView().controlSize(.small) };Text(model.cloudConnectionStatus).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true) }
             Text("连接测试只发送一条简短测试文字。正式处理时，所有返回方案仍经过参数范围、工具与指令约束检查。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-        }.disabled(model.agentBusy)
+        }.disabled(model.agentBusy || model.cloudCredentialBusy)
     }
     private var voiceSettings: some View {
         VStack(alignment:.leading,spacing:18) {

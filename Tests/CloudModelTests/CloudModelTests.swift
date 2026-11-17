@@ -19,6 +19,65 @@ private actor FixtureTransport: ModelHTTPTransport {
     func last()->URLRequest? { requests.last }
 }
 final class CloudModelTests: XCTestCase {
+    func testMissingAndLockedCredentialsRunLocalWithoutLeakingErrors() async throws {
+        var settings=configuration();settings.mode = .online;settings.fallbackToLocal=true
+        for locked in [false,true] {
+            let planner=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{
+                if locked {throw LumaError.unsupported("private-credential-fixture")}
+                return nil
+            },preview:{XCTFail("No preview should be made without credentials");return nil})
+            let result=try await planner.plan(context())
+            XCTAssertEqual(result.source,"本地规则 + Vision")
+            XCTAssertTrue(result.fallbackReason?.contains("已改用本地")==true)
+            XCTAssertFalse(result.fallbackReason?.contains("private-credential-fixture")==true)
+            XCTAssertEqual(result.recipe.geometry,GeometrySettings())
+        }
+    }
+    func testOfflineSetupHonorsDisabledFallbackAndCancellation() async throws {
+        var settings=configuration();settings.mode = .online;settings.fallbackToLocal=false
+        do {_=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{nil});XCTFail("Missing key must fail when fallback disabled")}
+        catch {}
+        settings.fallbackToLocal=true
+        do {_=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{throw CancellationError()});XCTFail("Cancellation must propagate")}
+        catch is CancellationError {} catch {XCTFail("Unexpected error")}
+        settings.mode = .local
+        let local=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{XCTFail("Local mode must not read keychain");return nil})
+        let result=try await local.plan(context())
+        XCTAssertEqual(result.source,"本地规则 + Vision")
+    }
+    func testJSONWrapperCompatibilityStaysStrictAndTextRequestAvoidsImageArray() async throws {
+        for content in ["{\"ok\":true}","```json\n{\"ok\":true}\n```","\u{feff} {\"ok\":true} "] {
+            let fixture=FixtureTransport(body:try JSONSerialization.data(withJSONObject:["choices":[["message":["content":content],"finish_reason":"stop"]]]))
+            try await OnlineAgentPlanner(settings:configuration(),key:"unit-fixture",transport:fixture).checkConnection()
+            let captured=await fixture.last(),request=try XCTUnwrap(captured)
+            let body=try XCTUnwrap(try JSONSerialization.jsonObject(with:request.httpBody!) as? [String:Any])
+            let messages=try XCTUnwrap(body["messages"] as? [[String:Any]])
+            XCTAssertNotNil(messages.last?["content"] as? String)
+        }
+        for invalid in ["Here is JSON: {\"ok\":true}","{} {}","[]","```json\n{}","{\"ok\":"] {XCTAssertThrowsError(try OnlineAgentPlanner.jsonObjectText(invalid))}
+        let privateBody="provider-echoed-private-fixture"
+        do {_=try OnlineAgentPlanner.outputText(Data(privateBody.utf8),style:.chatCompletions);XCTFail("Expected invalid JSON")}
+        catch {XCTAssertFalse(error.localizedDescription.contains(privateBody));XCTAssertTrue(error.localizedDescription.contains("服务响应"))}
+    }
+    func testSavedCredentialPersistsWithoutRepeatedInput() throws {
+        let env=ProcessInfo.processInfo.environment
+        let account=env["LUMA_CREDENTIAL_PROBE_ACCOUNT"] ?? "qa.persistence."+UUID().uuidString
+        guard account.hasPrefix("qa.persistence.") else {return XCTFail("Probe must use a disposable account")}
+        let fixture="fixture-value-for-keychain-persistence-only"
+        if env["LUMA_CREDENTIAL_PROBE_PHASE"]=="write" {
+            try IntegrationCredentials.save(fixture,account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+        } else if env["LUMA_CREDENTIAL_PROBE_PHASE"]=="read" {
+            defer {try? IntegrationCredentials.remove(account)}
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+        } else {
+            defer {try? IntegrationCredentials.remove(account)}
+            try IntegrationCredentials.save(fixture,account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture)
+            try IntegrationCredentials.save(fixture+"-updated",account:account)
+            XCTAssertEqual(try IntegrationCredentials.read(account),fixture+"-updated")
+        }
+    }
     func testDeepSeekDisablesThinkingForBoundedJSONButOtherProvidersAreUnchanged() async throws {
         for deepseek in [false,true] {
             var settings=configuration();if deepseek{settings.provider = .deepseek;settings.baseURL="https://api.deepseek.com";settings.model="deepseek-flash"}

@@ -97,6 +97,72 @@ class CommunityTests(unittest.TestCase):
         self.assertIsNone(self.call('/api/me',client=self.author)[1]['user']);self.assertEqual(self.call('/api/plugins','POST',self.package(),self.author)[0],401)
         with self.server.db.connection() as db:
             row=db.execute('SELECT * FROM users WHERE id=?',('creator',)).fetchone();self.assertNotEqual(row['password'],b'qa-password-12345');self.assertEqual(len(row['salt']),16)
+    def test_profile_update_preserves_published_package_and_session(self):
+        self.register(self.author,'creator');p=self.package();pid=p['manifest']['id']
+        self.assertEqual(self.call('/api/plugins','POST',p,self.author)[0],201)
+        before=self.call(f'/api/plugins/{pid}/package')[1]
+        body={'name':'摄影师新昵称','roles':['photographer'],'bio':'专注人像与自然光。'}
+        self.assertEqual(self.call('/api/me','PUT',body)[0],401)
+        status,result,_=self.call('/api/me','PUT',body,self.author);self.assertEqual(status,200,result)
+        self.assertEqual(self.call('/api/me',client=self.author)[1]['user']['name'],body['name'])
+        self.assertEqual(self.call('/api/authors/creator')[1]['bio'],body['bio'])
+        from urllib.parse import quote
+        self.assertEqual(self.call('/api/plugins?q='+quote(body['name']))[1]['total'],1)
+        self.assertEqual(self.call(f'/api/plugins/{pid}/package')[1],before)
+        for bad in [dict(body,id='reader'),dict(body,roles=[]),dict(body,roles=['developer','developer']),dict(body,bio='x'*601)]:
+            self.assertEqual(self.call('/api/me','PUT',bad,self.author)[0],422)
+
+    def test_follow_feed_idempotence_unfollow_and_database_restart(self):
+        self.register(self.author,'creator');self.register(self.reader,'reader');p=self.package()
+        self.call('/api/plugins','POST',p,self.author)
+        self.assertEqual(self.call('/api/plugins?following=1')[0],401)
+        self.assertEqual(self.call('/api/authors/creator/follow','PUT',{'value':True})[0],401)
+        self.assertEqual(self.call('/api/authors/reader/follow','PUT',{'value':True},self.reader)[0],422)
+        self.assertEqual(self.call('/api/authors/missing/follow','PUT',{'value':True},self.reader)[0],404)
+        for _ in range(2):
+            status,result,_=self.call('/api/authors/creator/follow','PUT',{'value':True},self.reader)
+            self.assertEqual(status,200);self.assertEqual(result['followers'],1)
+        self.assertEqual(self.call('/api/plugins?following=1',client=self.reader)[1]['total'],1)
+        from database import Database
+        from catalog import Catalog
+        restored=Catalog(Database(Path(self.temp.name)/'community.sqlite3')).author('creator',{'id':'reader'})
+        self.assertTrue(restored['following']);self.assertEqual(restored['followers'],1)
+        self.call('/api/authors/creator/follow','PUT',{'value':False},self.reader)
+        self.assertEqual(self.call('/api/plugins?following=1',client=self.reader)[1]['total'],0)
+
+    def test_pagination_reaches_beyond_one_hundred_and_author_filter(self):
+        self.register(self.author,'creator')
+        for n in range(105):
+            p=self.package('aiTool');p['manifest']['id']=f'qa.page.n{n}'
+            self.server.catalog.publish(json.dumps(p).encode(),{'id':'creator'})
+        seen=[]
+        for offset in range(0,105,24):
+            status,result,_=self.call(f'/api/plugins?author=creator&limit=24&offset={offset}')
+            self.assertEqual(status,200);self.assertEqual(result['total'],105)
+            self.assertEqual(result['hasMore'],offset+24<105)
+            seen.extend(i['manifest']['id'] for i in result['items'])
+        self.assertEqual(len(seen),105);self.assertEqual(len(set(seen)),105)
+        profile=self.call('/api/authors/creator')[1];self.assertEqual(profile['pluginCount'],105);self.assertEqual(len(profile['plugins']),24)
+        for query in ['offset=-1','limit=0','limit=101','offset=nan','offset=%C2%B2','offset='+('9'*100)]:
+            self.assertEqual(self.call('/api/plugins?'+query)[0],422)
+
+    def test_public_origin_secure_session_and_cross_origin_rejection(self):
+        self.server.public_origin='https://community.example.test'
+        headers={'Host':'community.example.test','Origin':'https://community.example.test','X-Real-IP':'203.0.113.1'}
+        self.assertFalse(self.call('/api/config',headers=headers)[1]['localOnly'])
+        status,result,h=self.call('/api/register','POST',{'id':'remote_reader','name':'远程测试','password':'fixture-password-only','roles':['photographer']},headers=headers)
+        self.assertEqual(status,200,result);self.assertIn('; Secure',h['Set-Cookie']);self.assertIn('HttpOnly',h['Set-Cookie'])
+        from http.cookies import SimpleCookie
+        cookie=SimpleCookie();cookie.load(h['Set-Cookie']);headers['Authorization']='Bearer '+cookie['luma_session'].value
+        self.assertEqual(self.call('/api/me',headers=headers)[1]['user']['id'],'remote_reader')
+        self.assertEqual(self.call('/api/me','PUT',{'name':'新昵称','bio':'','roles':['developer']},headers=headers)[0],200)
+        self.assertEqual(self.call('/api/me','PUT',{},headers={**headers,'Origin':'https://evil.example'})[0],403)
+        self.assertEqual(self.call('/api/me',headers={**headers,'Host':'evil.example'})[0],403)
+
+    def test_public_origin_configuration_rejects_insecure_or_credential_urls(self):
+        for origin in ['http://community.example','https://user:password@community.example','https://community.example/path','https://community.example?key=bad']:
+            with self.assertRaises(ValueError):CommunityServer(('127.0.0.1',0),Path(self.temp.name)/'invalid.sqlite3',public_origin=origin)
+
     def test_unauthorized_and_review_validation_and_report_queue(self):
         pid='studio.luma.clear-portrait';self.assertEqual(self.call(f'/api/plugins/{pid}/favorite','PUT',{'value':True})[0],401)
         self.register(self.reader,'reader')

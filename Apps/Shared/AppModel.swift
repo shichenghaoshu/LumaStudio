@@ -66,7 +66,8 @@ import PhotoCore
     var cloudTesting=false
     var cloudKeySaved=false
     var cloudSessionKeyAvailable=false
-    @ObservationIgnored private var sessionCloudKey: (account:String,value:String)?
+    var cloudCredentialBusy=false
+    @ObservationIgnored private var sessionCloudKey: (account:String,value:String,persisted:Bool)?
     var voiceInbox: [VoiceCommand]=[]
     var automaticVoiceExecution=false
     var allowAppleOnlineSpeech=false
@@ -497,22 +498,16 @@ import PhotoCore
     private func makeBatchPlanner(instruction: String,reference: ColorProfile?) async throws -> BatchProcessor.Planner {
         guard !instruction.isEmpty,instruction.count<=1000,let historyStore else {throw LumaError.unsupported("请输入 1–1000 字的批量修图要求")}
         let settings=cloudSettings,prefs=await preferenceMemory?.preferences() ?? EditingPreferences()
-        var installed: InstalledModel?
-        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+        var installed: InstalledModel?,loadFailure: String?
+        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {
+            do {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+            catch {loadFailure="本地模型不可用，已使用规则"}
+        }
         // Reuse one local planner actor: native inference stays serialized even with two exports.
-        let local=NativeAgentPlanner(model:installed)
-        let key: String?
-        if settings.mode == .online {
-            _=try settings.validate();key=try await cloudKey(for:settings)
-            guard key != nil else {throw LumaError.unsupported("请在接入设置中保存在线服务密钥")}
-        } else {key=nil}
-        return { asset,base in
-            let planner: any AgentPlanner
-            if let key {
-                let preview=settings.attachPreview ? try CloudPreview.jpeg(asset.thumbnailURL) : nil
-                let online=OnlineAgentPlanner(settings:settings,key:key,previewJPEG:preview)
-                planner=settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-            } else {planner=local}
+        let local=NativeAgentPlanner(model:installed,fallbackReason:loadFailure)
+        // Reuse the local actor while each photo keeps its own optional preview.
+        return { [self] asset,base in
+            let planner=try await CloudPlannerFactory.make(settings:settings,local:local,key:{try await self.cloudKey(for:settings)},preview:{try CloudPreview.jpeg(asset.thumbnailURL)})
             let worker=try PhotoProcessor()
             let session=AgentSession(engine:NativeImageEngine(processor:worker,profile:reference,raw:base.raw),planner:planner,history:historyStore)
             let result=try await session.run(asset:asset,instruction:instruction,preferences:prefs,currentRecipe:base.document,referenceProfileID:reference?.id,automaticCorrection:base.document.evaluation.automaticCorrection)
@@ -594,13 +589,7 @@ import PhotoCore
                 var model: InstalledModel?,loadFailure: String?
                 if preferModel,(cloud.mode == .local || cloud.fallbackToLocal) { do { model=try await modelManager?.activeAgent(device:deviceManager.snapshot()) } catch { loadFailure="模型未能通过本地校验，已使用规则："+error.localizedDescription } }
                 let local=NativeAgentPlanner(model:model,fallbackReason:loadFailure)
-                let planner: any AgentPlanner
-                if cloud.mode == .online {
-                    guard let key=try await cloudKey(for:cloud),!key.isEmpty else { throw LumaError.unsupported("请在“模型与语音接入”中填写在线服务 API 密钥") }
-                    let preview=cloud.attachPreview ? try CloudPreview.jpeg(input.thumbnailURL) : nil
-                    let online=OnlineAgentPlanner(settings:cloud,key:key,previewJPEG:preview)
-                    planner=cloud.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-                } else { planner=local }
+                let planner=try await CloudPlannerFactory.make(settings:cloud,local:local,key:{try await self.cloudKey(for:cloud)},preview:{try CloudPreview.jpeg(input.thumbnailURL)})
                 let engine=NativeImageEngine(processor:processor,profile:reference,raw:snapshot.raw)
                 let session=AgentSession(engine:engine,planner:planner,history:historyStore)
                 let result=try await session.run(asset:input,instruction:text,preferences:prefs,currentRecipe:(try? snapshot.validated())?.edit,referenceProfileID:reference?.id,previousInstructions:past,automaticCorrection:correction,updates:{ [weak self] update in
@@ -640,29 +629,61 @@ import PhotoCore
     private func updateAgentStatus(_ status: String,assetID: UUID,generation: UUID) { if selectedID==assetID,agentGeneration==generation { agentStatus=status } }
     func cancelAgent() { agentStatus="正在停止，等待当前操作结束…";agentTask?.cancel() }
     func refreshIntegrationCredentials() {
-        cloudSessionKeyAvailable=sessionCloudKey?.account==cloudSettings.credentialAccount
-        do {cloudKeySaved=try IntegrationCredentials.read(cloudSettings.credentialAccount) != nil}
-        catch {cloudKeySaved=false;cloudConnectionStatus=error.localizedDescription}
-        xiaozhiEndpointSaved=((try? IntegrationCredentials.read("xiaozhi.mcp.endpoint")) ?? nil) != nil
+        let account=cloudSettings.credentialAccount
+        if let cached=sessionCloudKey,cached.account==account {cloudKeySaved=cached.persisted;cloudSessionKeyAvailable = !cached.persisted;return}
+        cloudKeySaved=false;cloudSessionKeyAvailable=false
+        Task {
+            do {
+                let key=try await Task.detached {try IntegrationCredentials.read(account)}.value
+                guard cloudSettings.credentialAccount==account,sessionCloudKey?.account != account else {return}
+                if let key {sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudConnectionStatus="已自动读取保存的密钥，无需重复输入"}
+            } catch {if cloudSettings.credentialAccount==account {cloudConnectionStatus=error.localizedDescription}}
+            xiaozhiEndpointSaved=await Task.detached {((try? IntegrationCredentials.read("xiaozhi.mcp.endpoint")) ?? nil) != nil}.value
+        }
+    }
+    func authorizeSavedCloudKey() {
+        guard !cloudCredentialBusy else {return}
+        let account=cloudSettings.credentialAccount;cloudCredentialBusy=true
+        cloudConnectionStatus="请在 macOS 系统窗口授权读取；无需重新输入 API 密钥"
+        Task {
+            defer{cloudCredentialBusy=false}
+            do {
+                let key=try await Task.detached {try IntegrationCredentials.read(account,allowAuthenticationUI:true)}.value
+                guard cloudSettings.credentialAccount==account else {return}
+                guard let key else {cloudConnectionStatus="此服务尚未保存密钥，请填写一次并点击“保存并记住”";return}
+                sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudSessionKeyAvailable=false
+                cloudConnectionStatus="已读取保存的密钥；后续修图自动复用，无需重新输入"
+            } catch {if cloudSettings.credentialAccount==account {cloudConnectionStatus=error.localizedDescription}}
+        }
     }
     private func cloudKey(for settings: CloudSettings) async throws -> String? {
         if let session=sessionCloudKey,session.account==settings.credentialAccount {return session.value}
         let account=settings.credentialAccount
-        return try await Task.detached {try IntegrationCredentials.read(account)}.value
+        let key=try await Task.detached {try IntegrationCredentials.read(account)}.value
+        if let key,cloudSettings.credentialAccount==account {sessionCloudKey=(account,key,true);cloudKeySaved=true;cloudSessionKeyAvailable=false}
+        return key
     }
-    func useCloudKeyForSession(_ value: String) {
+    @discardableResult func useCloudKeyForSession(_ value: String) -> Bool {
         do {
             _=try cloudSettings.validate();let key=value.trimmingCharacters(in:.whitespacesAndNewlines)
             guard !key.isEmpty,key.count<=8192,!key.contains("\n"),!key.contains("\r") else {throw LumaError.unsupported("密钥格式无效")}
-            sessionCloudKey=(cloudSettings.credentialAccount,key);cloudSessionKeyAvailable=true
+            sessionCloudKey=(cloudSettings.credentialAccount,key,false);cloudKeySaved=false;cloudSessionKeyAvailable=true
             cloudConnectionStatus="本次会话密钥已就绪；退出应用后清除，尚未测试"
-        } catch {cloudConnectionStatus=error.localizedDescription}
+            return true
+        } catch {cloudConnectionStatus=error.localizedDescription;return false}
     }
     func saveCloudKey(_ value: String) {
-        useCloudKeyForSession(value)
-        guard cloudSessionKeyAvailable,let session=sessionCloudKey else {return}
-        do {try IntegrationCredentials.save(session.value,account:session.account);cloudKeySaved=true;cloudConnectionStatus="密钥已保存在系统钥匙串，尚未测试" }
-        catch {cloudConnectionStatus="本次会话可用；持久保存未完成："+error.localizedDescription}
+        guard !cloudCredentialBusy else {return}
+        guard useCloudKeyForSession(value),let session=sessionCloudKey else {return}
+        cloudCredentialBusy=true;cloudConnectionStatus="正在保存；如系统弹窗，请完成一次授权"
+        Task {
+            defer{cloudCredentialBusy=false}
+            do {
+                try await Task.detached {try IntegrationCredentials.save(session.value,account:session.account,allowAuthenticationUI:true)}.value
+                guard cloudSettings.credentialAccount==session.account else {return}
+                sessionCloudKey=(session.account,session.value,true);cloudKeySaved=true;cloudSessionKeyAvailable=false;cloudConnectionStatus="密钥已记住，下次启动自动读取，无需重复填写"
+            } catch {if cloudSettings.credentialAccount==session.account {cloudConnectionStatus="本次会话可用；持久保存未完成："+error.localizedDescription}}
+        }
     }
     func removeCloudKey() {
         sessionCloudKey=nil;cloudSessionKeyAvailable=false
@@ -982,16 +1003,13 @@ extension AppModel {
                 return try IntentSafetyGate.enforce(LocalRulePlanner().plan(context),context:context)
             }
         }
-        var installed: InstalledModel?
-        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
-        let local=NativeAgentPlanner(model:installed)
-        let planner: any AgentPlanner
-        if settings.mode == .online {
-            _=try settings.validate();guard let key=try await cloudKey(for:settings) else {throw LumaError.unsupported("请先在接入设置中配置在线模型密钥")}
-            let preview=settings.attachPreview ? try CloudPreview.jpeg(asset.thumbnailURL) : nil
-            let online=OnlineAgentPlanner(settings:settings,key:key,previewJPEG:preview)
-            planner=settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-        } else {planner=local}
+        var installed: InstalledModel?,loadFailure: String?
+        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {
+            do {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+            catch {loadFailure="本地模型不可用，已使用规则"}
+        }
+        let local=NativeAgentPlanner(model:installed,fallbackReason:loadFailure)
+        let planner=try await CloudPlannerFactory.make(settings:settings,local:local,key:{try await self.cloudKey(for:settings)},preview:{try CloudPreview.jpeg(asset.thumbnailURL)})
         return { instruction,current in
             let context=PlanningContext(instruction:instruction,analysis:analysis,preferences:prefs,currentRecipe:current,referenceProfileID:current.color.referenceProfileID)
             return try IntentSafetyGate.enforce(await planner.plan(context).recipe,context:context)
