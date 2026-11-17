@@ -19,6 +19,32 @@ private actor FixtureTransport: ModelHTTPTransport {
     func last()->URLRequest? { requests.last }
 }
 final class CloudModelTests: XCTestCase {
+    func testMissingAndLockedCredentialsRunLocalWithoutLeakingErrors() async throws {
+        var settings=configuration();settings.mode = .online;settings.fallbackToLocal=true
+        for locked in [false,true] {
+            let planner=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{
+                if locked {throw LumaError.unsupported("private-credential-fixture")}
+                return nil
+            },preview:{XCTFail("No preview should be made without credentials");return nil})
+            let result=try await planner.plan(context())
+            XCTAssertEqual(result.source,"本地规则 + Vision")
+            XCTAssertTrue(result.fallbackReason?.contains("已改用本地")==true)
+            XCTAssertFalse(result.fallbackReason?.contains("private-credential-fixture")==true)
+            XCTAssertEqual(result.recipe.geometry,GeometrySettings())
+        }
+    }
+    func testOfflineSetupHonorsDisabledFallbackAndCancellation() async throws {
+        var settings=configuration();settings.mode = .online;settings.fallbackToLocal=false
+        do {_=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{nil});XCTFail("Missing key must fail when fallback disabled")}
+        catch {}
+        settings.fallbackToLocal=true
+        do {_=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{throw CancellationError()});XCTFail("Cancellation must propagate")}
+        catch is CancellationError {} catch {XCTFail("Unexpected error")}
+        settings.mode = .local
+        let local=try await CloudPlannerFactory.make(settings:settings,local:RulesAgentPlanner(),key:{XCTFail("Local mode must not read keychain");return nil})
+        let result=try await local.plan(context())
+        XCTAssertEqual(result.source,"本地规则 + Vision")
+    }
     func testJSONWrapperCompatibilityStaysStrictAndTextRequestAvoidsImageArray() async throws {
         for content in ["{\"ok\":true}","```json\n{\"ok\":true}\n```","\u{feff} {\"ok\":true} "] {
             let fixture=FixtureTransport(body:try JSONSerialization.data(withJSONObject:["choices":[["message":["content":content],"finish_reason":"stop"]]]))

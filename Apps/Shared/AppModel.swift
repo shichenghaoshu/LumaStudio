@@ -498,22 +498,16 @@ import PhotoCore
     private func makeBatchPlanner(instruction: String,reference: ColorProfile?) async throws -> BatchProcessor.Planner {
         guard !instruction.isEmpty,instruction.count<=1000,let historyStore else {throw LumaError.unsupported("请输入 1–1000 字的批量修图要求")}
         let settings=cloudSettings,prefs=await preferenceMemory?.preferences() ?? EditingPreferences()
-        var installed: InstalledModel?
-        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+        var installed: InstalledModel?,loadFailure: String?
+        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {
+            do {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+            catch {loadFailure="本地模型不可用，已使用规则"}
+        }
         // Reuse one local planner actor: native inference stays serialized even with two exports.
-        let local=NativeAgentPlanner(model:installed)
-        let key: String?
-        if settings.mode == .online {
-            _=try settings.validate();key=try await cloudKey(for:settings)
-            guard key != nil else {throw LumaError.unsupported("请在接入设置中保存在线服务密钥")}
-        } else {key=nil}
-        return { asset,base in
-            let planner: any AgentPlanner
-            if let key {
-                let preview=settings.attachPreview ? try CloudPreview.jpeg(asset.thumbnailURL) : nil
-                let online=OnlineAgentPlanner(settings:settings,key:key,previewJPEG:preview)
-                planner=settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-            } else {planner=local}
+        let local=NativeAgentPlanner(model:installed,fallbackReason:loadFailure)
+        // Reuse the local actor while each photo keeps its own optional preview.
+        return { [self] asset,base in
+            let planner=try await CloudPlannerFactory.make(settings:settings,local:local,key:{try await self.cloudKey(for:settings)},preview:{try CloudPreview.jpeg(asset.thumbnailURL)})
             let worker=try PhotoProcessor()
             let session=AgentSession(engine:NativeImageEngine(processor:worker,profile:reference,raw:base.raw),planner:planner,history:historyStore)
             let result=try await session.run(asset:asset,instruction:instruction,preferences:prefs,currentRecipe:base.document,referenceProfileID:reference?.id,automaticCorrection:base.document.evaluation.automaticCorrection)
@@ -595,13 +589,7 @@ import PhotoCore
                 var model: InstalledModel?,loadFailure: String?
                 if preferModel,(cloud.mode == .local || cloud.fallbackToLocal) { do { model=try await modelManager?.activeAgent(device:deviceManager.snapshot()) } catch { loadFailure="模型未能通过本地校验，已使用规则："+error.localizedDescription } }
                 let local=NativeAgentPlanner(model:model,fallbackReason:loadFailure)
-                let planner: any AgentPlanner
-                if cloud.mode == .online {
-                    guard let key=try await cloudKey(for:cloud),!key.isEmpty else { throw LumaError.unsupported("请在“模型与语音接入”中填写在线服务 API 密钥") }
-                    let preview=cloud.attachPreview ? try CloudPreview.jpeg(input.thumbnailURL) : nil
-                    let online=OnlineAgentPlanner(settings:cloud,key:key,previewJPEG:preview)
-                    planner=cloud.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-                } else { planner=local }
+                let planner=try await CloudPlannerFactory.make(settings:cloud,local:local,key:{try await self.cloudKey(for:cloud)},preview:{try CloudPreview.jpeg(input.thumbnailURL)})
                 let engine=NativeImageEngine(processor:processor,profile:reference,raw:snapshot.raw)
                 let session=AgentSession(engine:engine,planner:planner,history:historyStore)
                 let result=try await session.run(asset:input,instruction:text,preferences:prefs,currentRecipe:(try? snapshot.validated())?.edit,referenceProfileID:reference?.id,previousInstructions:past,automaticCorrection:correction,updates:{ [weak self] update in
@@ -1015,16 +1003,13 @@ extension AppModel {
                 return try IntentSafetyGate.enforce(LocalRulePlanner().plan(context),context:context)
             }
         }
-        var installed: InstalledModel?
-        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
-        let local=NativeAgentPlanner(model:installed)
-        let planner: any AgentPlanner
-        if settings.mode == .online {
-            _=try settings.validate();guard let key=try await cloudKey(for:settings) else {throw LumaError.unsupported("请先在接入设置中配置在线模型密钥")}
-            let preview=settings.attachPreview ? try CloudPreview.jpeg(asset.thumbnailURL) : nil
-            let online=OnlineAgentPlanner(settings:settings,key:key,previewJPEG:preview)
-            planner=settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
-        } else {planner=local}
+        var installed: InstalledModel?,loadFailure: String?
+        if useLocalModel,(settings.mode == .local || settings.fallbackToLocal) {
+            do {installed=try await modelManager?.activeAgent(device:deviceManager.snapshot())}
+            catch {loadFailure="本地模型不可用，已使用规则"}
+        }
+        let local=NativeAgentPlanner(model:installed,fallbackReason:loadFailure)
+        let planner=try await CloudPlannerFactory.make(settings:settings,local:local,key:{try await self.cloudKey(for:settings)},preview:{try CloudPreview.jpeg(asset.thumbnailURL)})
         return { instruction,current in
             let context=PlanningContext(instruction:instruction,analysis:analysis,preferences:prefs,currentRecipe:current,referenceProfileID:current.color.referenceProfileID)
             return try IntentSafetyGate.enforce(await planner.plan(context).recipe,context:context)

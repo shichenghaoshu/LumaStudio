@@ -129,3 +129,35 @@ public struct OnlineWithLocalFallback: AgentPlanner {
         }
     }
 }
+
+/// Resolve setup failures inside the same fallback policy as request failures.
+/// A missing/locked credential must not prevent offline editing.
+public enum CloudPlannerFactory {
+    public static func make(settings: CloudSettings,local: any AgentPlanner,
+                            key: () async throws -> String?,
+                            preview: () throws -> Data? = {nil}) async throws -> any AgentPlanner {
+        guard settings.mode == .online else {return local}
+        do {
+            try Task.checkCancellation()
+            _=try settings.validate()
+            guard let value=try await key(),!value.isEmpty else {throw LumaError.unsupported("未配置在线服务密钥")}
+            let online=OnlineAgentPlanner(settings:settings,key:value,previewJPEG:settings.attachPreview ? try preview() : nil)
+            return settings.fallbackToLocal ? OnlineWithLocalFallback(online:online,local:local) : online
+        } catch is CancellationError {throw CancellationError()}
+        catch {
+            try Task.checkCancellation()
+            guard settings.fallbackToLocal else {throw error}
+            // Never retain or display an arbitrary credential-provider error.
+            return OfflineSetupFallback(local:local)
+        }
+    }
+    private struct OfflineSetupFallback: AgentPlanner {
+        let local: any AgentPlanner
+        func plan(_ context: PlanningContext) async throws -> AgentPlan {
+            try Task.checkCancellation()
+            let result=try await local.plan(context)
+            return AgentPlan(recipe:result.recipe,source:result.source,
+                             fallbackReason:"在线配置或密钥不可用，已改用本地模型 / 规则",planningMilliseconds:result.planningMilliseconds)
+        }
+    }
+}
