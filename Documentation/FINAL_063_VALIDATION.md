@@ -32,3 +32,5 @@
 - [Fujifilm X-T5 Gallery](https://www.fujifilm-x.com/global/products/cameras/x-t5/gallery/)
 
 Canon 官网当前对本机下载返回403，未绕过访问限制，未计入下载数量。官网照片与本次用户图片只用于本地验收，不随源码或安装包分发，不上传社区。逐图来源和SHA256记录在本地 Artifacts/Final063/sample-sources.json，原图与处理结果在 work/final063。
+
+连接兼容性收束：无图片请求使用字符串消息，连接检查给出明确 JSON 示例与足够输出预算；兼容完整 JSON 外层单个 Markdown 代码块，继续拒绝解释性文字、多个对象、截断内容与非对象。外层服务响应与模型方案解析错误分开显示，不回显服务端原文或密钥。首次真实 DeepSeek 检查发现格式失败，最终真实重测结果另见交付回执。

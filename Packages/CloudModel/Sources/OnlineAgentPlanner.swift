@@ -45,7 +45,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
         let user="instruction: \(context.instruction)\nanalysis: \(analysis)\nsource_format: \(context.sourceFormat ?? "unknown")\navailable_RAW_parameters: \(context.availableRAWParameters?.joined(separator:",") ?? "unknown; use global adjustments")\ncurrent_recipe: \(current)\nreference_profile_id: \(context.referenceProfileID ?? "none")\nPrevious instructions: \(context.previousInstructions.suffix(3).joined(separator:"; "))"
         let request=try makeRequest(system:system,user:user,image:settings.attachPreview ? previewJPEG : nil,maxTokens:2048)
         let data=try await perform(request)
-        let output=try Self.outputText(data,style:settings.style)
+        let output=try Self.jsonObjectText(Self.outputText(data,style:settings.style))
         let decoded=try ToolRegistry().proposal(Data(output.utf8),preserving:context.currentRecipe)
         var recipe=try IntentSafetyGate.enforce(decoded,context:context)
         if context.analysis.faceCount==0 || InstructionParser.parse(context.instruction).beautyForbidden { recipe.beauty.enabled=false }
@@ -53,9 +53,9 @@ public struct OnlineAgentPlanner: AgentPlanner {
         return AgentPlan(recipe:recipe,source:"在线 · \(settings.provider.title) / \(settings.model)",planningMilliseconds:Date().timeIntervalSince(start)*1000)
     }
     public func checkConnection() async throws {
-        let request=try makeRequest(system:"Return JSON only.",user:"Return {\"ok\":true}.",image:nil,maxTokens:128)
-        let output=try Self.outputText(await perform(request),style:settings.style)
-        guard let object=try JSONSerialization.jsonObject(with:Data(output.utf8)) as? [String:Any],object["ok"] as? Bool==true else { throw LumaError.unsupported("服务可访问，但未通过 JSON 返回检查") }
+        let request=try makeRequest(system:"Return a single JSON object, without markdown: {\"ok\":true}",user:"Return JSON: {\"ok\":true}",image:nil,maxTokens:512)
+        let output=try Self.jsonObjectText(Self.outputText(await perform(request),style:settings.style))
+        guard let object=try? JSONSerialization.jsonObject(with:Data(output.utf8)) as? [String:Any],object["ok"] as? Bool==true else { throw LumaError.unsupported("服务已响应，但模型未返回预期的连接测试 JSON") }
     }
     private func makeRequest(system: String,user: String,image: Data?,maxTokens: Int) throws -> URLRequest {
         let base=try settings.validate()
@@ -73,7 +73,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
         } else {
             content=[["type":"text","text":user]]
             if let imageURL { content.append(["type":"image_url","image_url":["url":imageURL,"detail":"low"]]) }
-            body=["model":settings.model,"messages":[["role":"system","content":system],["role":"user","content":content]],"response_format":["type":"json_object"],"max_tokens":maxTokens,"stream":false]
+            body=["model":settings.model,"messages":[["role":"system","content":system],["role":"user","content":imageURL == nil ? user as Any : content as Any]],"response_format":["type":"json_object"],"max_tokens":maxTokens,"stream":false]
         }
         // DeepSeek enables thinking by default. These bounded JSON parameter patches
         // use non-thinking mode so the response budget is available for the actual patch.
@@ -93,7 +93,7 @@ public struct OnlineAgentPlanner: AgentPlanner {
         }
     }
     public static func outputText(_ data: Data,style: CloudAPIStyle) throws -> String {
-        guard data.count<=2*1024*1024,let object=try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw LumaError.corruptData("在线模型返回格式") }
+        guard data.count<=2*1024*1024,let object=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] else { throw LumaError.corruptData("在线服务响应不是有效 JSON，请检查服务地址或网络代理") }
         if style == .chatCompletions,
            let choices=object["choices"] as? [[String:Any]],let choice=choices.first,
            choice["finish_reason"] as? String != "length",let message=choice["message"] as? [String:Any],message["refusal"] as? String == nil,
@@ -103,6 +103,17 @@ public struct OnlineAgentPlanner: AgentPlanner {
             if !texts.isEmpty { return texts.joined() }
         }
         throw LumaError.corruptData("在线模型没有完整的 JSON 方案，或拒绝了请求")
+    }
+    /// Accept one complete JSON object, optionally wrapped in a single Markdown
+    /// code fence. Never extract a plausible substring from arbitrary prose.
+    public static func jsonObjectText(_ value: String) throws -> String {
+        var text=value.trimmingCharacters(in:.whitespacesAndNewlines.union(CharacterSet(charactersIn:"\u{feff}")))
+        if text.hasPrefix("```json\n") || text.hasPrefix("```\n") {
+            guard text.hasSuffix("```"),let first=text.firstIndex(of:"\n") else {throw LumaError.corruptData("模型的 JSON 代码块不完整")}
+            text=String(text[text.index(after:first)..<text.index(text.endIndex,offsetBy:-3)]).trimmingCharacters(in:.whitespacesAndNewlines)
+        }
+        guard let _=(try? JSONSerialization.jsonObject(with:Data(text.utf8))) as? [String:Any] else {throw LumaError.corruptData("模型测试或方案内容不是完整的 JSON 对象；请重试或更换模型")}
+        return text
     }
 }
 public struct OnlineWithLocalFallback: AgentPlanner {

@@ -19,6 +19,20 @@ private actor FixtureTransport: ModelHTTPTransport {
     func last()->URLRequest? { requests.last }
 }
 final class CloudModelTests: XCTestCase {
+    func testJSONWrapperCompatibilityStaysStrictAndTextRequestAvoidsImageArray() async throws {
+        for content in ["{\"ok\":true}","```json\n{\"ok\":true}\n```","\u{feff} {\"ok\":true} "] {
+            let fixture=FixtureTransport(body:try JSONSerialization.data(withJSONObject:["choices":[["message":["content":content],"finish_reason":"stop"]]]))
+            try await OnlineAgentPlanner(settings:configuration(),key:"unit-fixture",transport:fixture).checkConnection()
+            let captured=await fixture.last(),request=try XCTUnwrap(captured)
+            let body=try XCTUnwrap(try JSONSerialization.jsonObject(with:request.httpBody!) as? [String:Any])
+            let messages=try XCTUnwrap(body["messages"] as? [[String:Any]])
+            XCTAssertNotNil(messages.last?["content"] as? String)
+        }
+        for invalid in ["Here is JSON: {\"ok\":true}","{} {}","[]","```json\n{}","{\"ok\":"] {XCTAssertThrowsError(try OnlineAgentPlanner.jsonObjectText(invalid))}
+        let privateBody="provider-echoed-private-fixture"
+        do {_=try OnlineAgentPlanner.outputText(Data(privateBody.utf8),style:.chatCompletions);XCTFail("Expected invalid JSON")}
+        catch {XCTAssertFalse(error.localizedDescription.contains(privateBody));XCTAssertTrue(error.localizedDescription.contains("服务响应"))}
+    }
     func testSavedCredentialPersistsWithoutRepeatedInput() throws {
         let env=ProcessInfo.processInfo.environment
         let account=env["LUMA_CREDENTIAL_PROBE_ACCOUNT"] ?? "qa.persistence."+UUID().uuidString
