@@ -115,7 +115,7 @@ struct MacEditWorkspace: View {
                     .buttonStyle(StudioButtonStyle(role:.primary)).accessibilityLabel("导出当前照片")
                     .keyboardShortcut("e",modifiers:.command).help("导出当前照片 ⌘E")
                 Menu{Button("选择输出文件夹…"){model.choose(.exportSingle)};Button("导出设置…"){show(.output)}}label:{Image(systemName:"chevron.down").font(.system(size:10,weight:.semibold)).frame(width:24,height:32)}
-                    .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("更多导出选项").help("更多导出选项")
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("更多导出选项").help("更多导出选项")
             }.disabled(model.selected==nil || model.rendering || model.agentBusy)
         }.padding(.horizontal,20).frame(height:70).background(StudioPalette.chrome)
             .overlay(alignment:.bottom){StudioPalette.line.frame(height:1)}
