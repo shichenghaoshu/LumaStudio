@@ -13,13 +13,13 @@ struct ProInspectorGroup<Content: View>: View {
     var body: some View {
         VStack(alignment:.leading,spacing:0) {
             HStack(spacing:8) {
-                Button{expanded.toggle()}label:{HStack(spacing:9){Image(systemName:expanded ? "chevron.down" : "chevron.right").font(.system(size:9,weight:.semibold)).frame(width:10);Text(title).font(.system(size:12,weight:.medium));if changed>0{Circle().fill(studioAccent).frame(width:4,height:4)};Spacer(minLength:2)}}.buttonStyle(.plain).accessibilityLabel((expanded ? "收起" : "展开")+title)
+                Button{expanded.toggle()}label:{HStack(spacing:9){Image(systemName:expanded ? "chevron.down" : "chevron.right").font(.system(size:9,weight:.semibold)).frame(width:10);Text(title).font(.system(size:12,weight:.medium));if changed>0{Circle().fill(studioAccent).frame(width:4,height:4)};Spacer(minLength:2)}}.buttonStyle(StudioButtonStyle(feedback:false)).accessibilityLabel((expanded ? "收起" : "展开")+title)
                 Button{model.previewBypassedParameters=hidden ? [] : ids}label:{Image(systemName:hidden ? "eye.slash" : "eye").foregroundStyle(hidden ? studioAccent : Color.white.opacity(0.4))}.help("仅隐藏本组预览，配方与导出保持当前参数").accessibilityLabel((hidden ? "显示" : "暂时隐藏")+title+"效果")
                 Button{model.toggleParameterLocks(ids)}label:{Image(systemName:locked ? "lock.fill" : "lock.open").foregroundStyle(locked ? studioAccent : Color.white.opacity(0.4))}.help("锁定本组，AI 保留这些值").accessibilityLabel((locked ? "解锁" : "锁定")+title+"组")
                 Button(action:reset){Image(systemName:"arrow.counterclockwise").foregroundStyle(.white.opacity(0.4))}.help("重置本组").accessibilityLabel("重置"+title+"组")
-            }.buttonStyle(.plain).font(.system(size:10)).padding(.horizontal,12).frame(height:43)
+            }.buttonStyle(StudioButtonStyle(role:.icon)).font(.system(size:11)).padding(.horizontal,8).frame(height:44)
             if expanded {VStack(alignment:.leading,spacing:13){content()}.padding(.horizontal,12).padding(.bottom,16)}
-        }.background(Color(white:0.145),in:RoundedRectangle(cornerRadius:9))
+        }.background(Color(white:0.125),in:RoundedRectangle(cornerRadius:9))
     }
 }
 
@@ -44,7 +44,7 @@ struct ProHistogramPanel: View {
                 Button{model.instruction="自动校正当前照片曝光与白平衡，恢复高光和阴影，不要美颜，不改变其他参数。";model.runAgent()}label:{Label("AI 校准",systemImage:"wand.and.stars").frame(maxWidth:.infinity)}
                 Button{model.batchInstruction="逐张自动校正曝光和白平衡，恢复高光和阴影，不要美颜，保留其他参数。";model.batchAIEnabled=true;if model.selection.isEmpty{model.selection=Set(model.visibleAssets.map(\.id))};model.page = .batch}label:{Label("逐张校准…",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity)}
             }.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).disabled(model.selected==nil || model.agentBusy)
-        }.padding(12).background(Color(white:0.145),in:RoundedRectangle(cornerRadius:9))
+        }.padding(12).background(Color(white:0.125),in:RoundedRectangle(cornerRadius:9))
             .task(id:model.preview.map{ObjectIdentifier($0)}) {
                 guard let image=model.preview else {data=ImageHistogram();return}
                 let measured=await Task.detached(priority:.utility){ImageHistogram.measure(image)}.value

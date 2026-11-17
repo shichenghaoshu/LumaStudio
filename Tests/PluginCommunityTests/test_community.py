@@ -34,6 +34,16 @@ class CommunityTests(unittest.TestCase):
         self.assertTrue(all(x['example'] and x['downloads']==0 and x['rating']['average'] is None and x['rating']['count']==0 for x in items))
         result=self.call('/api/plugins?q='+__import__('urllib.parse',fromlist=['quote']).quote('补光')+'&kind=localAdjustment')[1];self.assertEqual(result['total'],1)
         self.assertEqual(self.call('/api/config')[1]['payments'],'not_connected')
+    def test_shiguang_brand_asset_has_exact_bytes_and_safe_static_route(self):
+        client=build_opener(ProxyHandler({}))
+        with client.open(self.base+'/shiguang-mark.png',timeout=10) as response:
+            self.assertEqual(response.headers['Content-Type'],'image/png')
+            self.assertEqual(hashlib.sha256(response.read()).hexdigest(),hashlib.sha256((ROOT/'Resources/Assets.xcassets/ShiguangMark.imageset/shiguang-mark.png').read_bytes()).hexdigest())
+        with client.open(self.base+'/',timeout=10) as response:
+            html=response.read().decode()
+            self.assertIn('<title>拾光 · 创作中心</title>',html)
+            self.assertIn('alt="拾光商标"',html)
+        self.assertEqual(self.call('/unapproved.png')[0],404)
     def test_real_publish_search_rate_favorite_download_and_restart_persistence(self):
         self.register(self.author,'creator');self.register(self.reader,'reader')
         p=self.package();pid=p['manifest']['id'];status,body,_=self.call('/api/plugins','POST',p,self.author);self.assertEqual(status,201,body)

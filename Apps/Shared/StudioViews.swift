@@ -3,7 +3,7 @@ import PhotoCore
 import CoreImage.CIFilterBuiltins
 import UniformTypeIdentifiers
 
-let studioAccent=Color(red:0.98,green:0.84,blue:0.18)
+let studioAccent=Color(red:0.86,green:0.71,blue:0.42)
 struct StudioRoot: View {
     @Bindable var model: AppModel
     var body: some View {
@@ -26,7 +26,7 @@ struct StudioRoot: View {
         #if !os(macOS)
         .fileImporter(isPresented:$model.importerPresented,allowedContentTypes:model.importTypes,allowsMultipleSelection:model.importMultiple,onCompletion:model.handleImport)
         #endif
-        .alert("LumaStudio",isPresented:Binding(get:{model.message != nil},set:{if !$0 { model.message=nil }})) { Button("好"){model.message=nil} } message:{Text(model.message ?? "")}
+        .alert("拾光",isPresented:Binding(get:{model.message != nil},set:{if !$0 { model.message=nil }})) { Button("好"){model.message=nil} } message:{Text(model.message ?? "")}
         .sheet(isPresented:$model.syncPresented) { SyncPanel(model:model,sync:model.sync) }
         .sheet(isPresented:$model.modelManagerPresented) { LocalModelsPanel(model:model) }
         #if os(macOS)

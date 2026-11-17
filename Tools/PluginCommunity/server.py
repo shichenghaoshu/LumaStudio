@@ -119,9 +119,9 @@ class Handler(BaseHTTPRequestHandler):
                 elif method=='PUT' and action=='rating':result=catalog.rate(pid,self.body(),auth())
                 elif method=='POST' and action=='report':result=catalog.report(pid,self.body(),auth())
                 else:raise APIError(405,'method_not_allowed','不支持此操作')
-            elif method=='GET' and path in ['/','/index.html','/app.js','/style.css']:
+            elif method=='GET' and path in ['/','/index.html','/app.js','/style.css','/shiguang-mark.png']:
                 file=STATIC/('index.html' if path=='/' else path[1:]);result=file.read_bytes()
-                kind={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'}[file.suffix]
+                kind={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png'}[file.suffix]
             else:raise APIError(404,'not_found','页面或接口不存在')
             self.respond(status,result,kind,headers)
         except APIError as error:
@@ -154,7 +154,7 @@ def main():
                 try:os.kill(args.parent_pid,0)
                 except ProcessLookupError:server.shutdown();return
         threading.Thread(target=watch_parent,daemon=True).start()
-    print(f'LumaStudio 创作中心: http://127.0.0.1:{server.server_port}',flush=True)
+    print(f'拾光创作中心: http://127.0.0.1:{server.server_port}',flush=True)
     try:server.serve_forever(poll_interval=.25)
     finally:server.server_close()
 if __name__=='__main__':main()

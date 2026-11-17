@@ -14,9 +14,9 @@ struct MacWorkspaceRail: View {
     var body: some View {
         VStack(spacing:8) {
             VStack(spacing:7) {
-                Image(systemName:"camera.aperture").font(.system(size:25,weight:.light)).foregroundStyle(studioAccent)
-                Text("LUMA").font(.system(size:9,weight:.semibold,design:.rounded)).tracking(2)
-            }.padding(.top,20).padding(.bottom,24).accessibilityElement(children:.combine).accessibilityLabel("LumaStudio")
+                ShiguangBrand(compact:true)
+                Text("拾光").font(.system(size:11,weight:.medium)).tracking(2)
+            }.padding(.top,20).padding(.bottom,24).accessibilityElement(children:.combine).accessibilityLabel("拾光")
             ForEach(AppModel.Page.allCases) { page in
                 WorkspaceRailButton(title:page.rawValue,symbol:page.symbol,selected:model.page==page) { model.page=page }
             }
@@ -44,7 +44,7 @@ private struct WorkspaceRailButton: View {
                 .foregroundStyle(selected ? studioAccent : Color.white.opacity(hovered ? 0.9 : 0.55))
                 .background(selected ? studioAccent.opacity(0.1) : (hovered ? Color.white.opacity(0.04) : .clear),in:RoundedRectangle(cornerRadius:9))
                 .overlay(alignment:.leading) { if selected { RoundedRectangle(cornerRadius:2).fill(studioAccent).frame(width:2,height:22).offset(x:-10) } }
-        }.buttonStyle(.plain).onHover{hovered=$0}.help(title).accessibilityLabel(title)
+        }.buttonStyle(StudioButtonStyle(role:.tool,selected:selected)).onHover{hovered=$0}.help(title).accessibilityLabel(title)
     }
 }
 
@@ -56,7 +56,8 @@ private enum WorkspaceInspectorTab: String,CaseIterable {
 struct MacEditWorkspace: View {
     @Bindable var model: AppModel
     @State private var tab: WorkspaceInspectorTab = .color
-    @State private var assistantOpen=false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("shiguang.interfaceAnimations") private var animations=true
     @State private var fineEditing=true
     @State private var referenceLines=false
     @State private var zoom: CGFloat=1
@@ -68,12 +69,12 @@ struct MacEditWorkspace: View {
         VStack(spacing:0) {
             header
             HStack(spacing:0) {
-                if assistantOpen {MacAgentConversation(model:model).frame(width:310);Divider()}
+                if model.editorAssistantOpen {MacAgentConversation(model:model).frame(width:310);Divider()}
                 VStack(spacing:0) {
                     canvasToolbar
                     MacPhotoStage(model:model,zoom:zoom,comparing:comparing,comparisonPosition:$comparisonPosition)
                         .overlay {if referenceLines {GeometryReader{proxy in Path{path in for i in 1...2{let t=CGFloat(i)/3;path.move(to:CGPoint(x:proxy.size.width*t,y:0));path.addLine(to:CGPoint(x:proxy.size.width*t,y:proxy.size.height));path.move(to:CGPoint(x:0,y:proxy.size.height*t));path.addLine(to:CGPoint(x:proxy.size.width,y:proxy.size.height*t))}}.stroke(.white.opacity(0.28),lineWidth:0.5)}.allowsHitTesting(false)}}
-                        .overlay(alignment:.bottomTrailing){if assistantOpen {Button{fineEditing.toggle();if tab == .assistant{tab = .color}}label:{Label(fineEditing ? "收起参数" : "精细调整",systemImage:"slider.horizontal.3")}.buttonStyle(.bordered).padding(16)}}
+                        .overlay(alignment:.bottomTrailing){if model.editorAssistantOpen {Button{fineEditing.toggle();if tab == .assistant{tab = .color}}label:{Label(fineEditing ? "收起参数" : "精细调整",systemImage:"slider.horizontal.3")}.buttonStyle(.bordered).padding(16)}}
                     previewStatus
                     MacWorkspaceFilmstrip(model:model)
                 }.frame(maxWidth:.infinity,maxHeight:.infinity)
@@ -82,47 +83,68 @@ struct MacEditWorkspace: View {
             }
         }.background(Color(white:0.07))
             .onChange(of:model.selectedID){_,_ in zoom=1;comparing=false;comparisonPosition=0.5}
+            .onChange(of:model.editorAssistantOpen){_,open in fineEditing = !open;model.drawingBrush=false}
+            .onAppear{if model.editorAssistantOpen {fineEditing=false}}
+            .animation(reduceMotion || !animations ? nil : .easeInOut(duration:0.18),value:model.editorAssistantOpen)
+            .animation(reduceMotion || !animations ? nil : .easeInOut(duration:0.18),value:fineEditing)
     }
     private var header: some View {
-        HStack(spacing:14) {
-            HStack(spacing:8){Image(systemName:"camera.aperture").font(.system(size:22,weight:.light)).foregroundStyle(studioAccent);Text("LumaStudio").font(.system(size:13,weight:.semibold))}
-            ImportButtons(model:model)
-            Spacer(minLength:10)
-            HStack(spacing:2) {
-                headerMode("精修",symbol:"slider.horizontal.3",selected:!assistantOpen){assistantOpen=false;fineEditing=true;tab = .color}
-                headerMode("AI 助手",symbol:"sparkles",selected:assistantOpen){assistantOpen=true;fineEditing=false;model.drawingBrush=false}
+        HStack(spacing:16) {
+            ShiguangBrand()
+            ImportButtons(model:model).font(.system(size:12,weight:.medium))
+            Spacer(minLength:0)
+            HStack(spacing:3) {
+                headerMode("精修",symbol:"slider.horizontal.3",selected:!model.editorAssistantOpen){model.editorAssistantOpen=false;fineEditing=true;tab = .color}
+                headerMode("AI 助手",symbol:"sparkles",selected:model.editorAssistantOpen){model.editorAssistantOpen=true;fineEditing=false;model.drawingBrush=false}
                 headerMode("批量",symbol:"square.grid.2x2",selected:false){model.page = .batch}
-            }.padding(3).background(.white.opacity(0.035),in:RoundedRectangle(cornerRadius:7))
-            Spacer(minLength:10)
-            HStack(spacing:12) {
-                Button{model.page = .capture}label:{Image(systemName:"camera")}.help("拍摄工作区").accessibilityLabel("拍摄工作区")
-                Button{model.pluginCenterPresented=true}label:{Image(systemName:"square.stack.3d.up")}.help("创作中心：插件、配方与创作者").accessibilityLabel("打开创作中心")
-                Button{model.integrationsPresented=true}label:{Image(systemName:"network")}.help("模型 API 与语音接入").accessibilityLabel("接入设置")
-                Button{model.modelManagerPresented=true}label:{Image(systemName:"cpu")}.help("本地模型").accessibilityLabel("本地模型设置")
-                Button{model.agentProcessPresented=true}label:{Image(systemName:"list.bullet.rectangle")}.help("Agent 处理过程").accessibilityLabel("打开处理过程")
-            }.buttonStyle(.plain).font(.system(size:14)).foregroundStyle(.secondary)
-            HStack(spacing:0) {
-                Button("导出"){model.exportToLibrary()}.buttonStyle(.plain).padding(.leading,19).padding(.trailing,12).accessibilityLabel("导出当前照片").keyboardShortcut("e",modifiers:.command).help("导出当前照片 ⌘E")
-                Menu{Button("选择输出文件夹…"){model.choose(.exportSingle)};Button("导出设置…"){show(.output)}}label:{Image(systemName:"chevron.down").padding(.trailing,10)}.menuStyle(.borderlessButton).fixedSize().accessibilityLabel("更多导出选项")
-            }.font(.system(size:12,weight:.semibold)).foregroundStyle(.black).frame(height:31).background(studioAccent,in:RoundedRectangle(cornerRadius:6)).disabled(model.selected==nil || model.rendering || model.agentBusy)
-        }.padding(.horizontal,16).frame(height:58).background(Color(white:0.08))
+            }.padding(4).background(Color.black.opacity(0.22),in:RoundedRectangle(cornerRadius:11))
+            Spacer(minLength:0)
+            HStack(spacing:3) {
+                headerIcon("camera","拍摄工作区"){model.page = .capture}
+                headerIcon("square.stack.3d.up","打开创作中心"){model.pluginCenterPresented=true}
+                headerIcon("network","接入设置"){model.integrationsPresented=true}
+                headerIcon("cpu","本地模型设置"){model.modelManagerPresented=true}
+                headerIcon("list.bullet.rectangle","打开处理过程"){model.agentProcessPresented=true}
+                Button{fineEditing.toggle()}label:{Image(systemName:"sidebar.right").font(.system(size:14))}
+                    .buttonStyle(StudioButtonStyle(role:.icon,selected:fineEditing))
+                    .accessibilityLabel(fineEditing ? "隐藏参数面板" : "显示参数面板")
+                    .help("显示 / 隐藏参数 ⌥⌘I").keyboardShortcut("i",modifiers:[.command,.option])
+            }
+            HStack(spacing:1) {
+                Button{model.exportToLibrary()}label:{Label("导出",systemImage:"square.and.arrow.up").font(.system(size:12,weight:.semibold))}
+                    .buttonStyle(StudioButtonStyle(role:.primary)).accessibilityLabel("导出当前照片")
+                    .keyboardShortcut("e",modifiers:.command).help("导出当前照片 ⌘E")
+                Menu{Button("选择输出文件夹…"){model.choose(.exportSingle)};Button("导出设置…"){show(.output)}}label:{Image(systemName:"chevron.down").font(.system(size:10,weight:.semibold)).frame(width:24,height:32)}
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("更多导出选项").help("更多导出选项")
+            }.disabled(model.selected==nil || model.rendering || model.agentBusy)
+        }.padding(.horizontal,20).frame(height:70).background(StudioPalette.chrome)
+            .overlay(alignment:.bottom){StudioPalette.line.frame(height:1)}
+    }
+    private func headerIcon(_ symbol: String,_ title: String,action: @escaping ()->Void)->some View {
+        Button(action:action){Image(systemName:symbol).font(.system(size:14))}
+            .buttonStyle(StudioButtonStyle(role:.icon)).help(title).accessibilityLabel(title)
     }
     private func headerMode(_ title: String,symbol: String,selected: Bool,action: @escaping ()->Void)->some View {
-        Button(action:action){Label(title,systemImage:symbol).font(.system(size:11,weight:.medium)).padding(.horizontal,15).padding(.vertical,7).background(selected ? .white.opacity(0.13) : .clear,in:RoundedRectangle(cornerRadius:5)).foregroundStyle(selected ? .white : .secondary)}.buttonStyle(.plain).accessibilityLabel(title+"工作区")
+        Button(action:action){Label(title,systemImage:symbol).font(.system(size:12,weight:.medium)).padding(.horizontal,6)}
+            .buttonStyle(StudioButtonStyle(selected:selected)).accessibilityLabel(title+"工作区")
+            .accessibilityAddTraits(selected ? [.isSelected] : [])
+            .help(title+(title == "精修" ? " ⌘1" : (title == "AI 助手" ? " ⌘2" : " ⌘3")))
     }
     private func tool(_ title: String,_ symbol: String,active: Bool=false,action: @escaping ()->Void)->some View {
-        Button(action:action){VStack(spacing:5){Image(systemName:symbol).font(.system(size:17,weight:.light));Text(title).font(.system(size:9))}.frame(minWidth:39).frame(height:49).foregroundStyle(active ? studioAccent : Color.white.opacity(0.68))}.buttonStyle(.plain).accessibilityLabel(title+"工具")
+        Button(action:action){VStack(spacing:5){Image(systemName:symbol).font(.system(size:17,weight:.regular));Text(title).font(.system(size:10,weight:.medium))}.frame(minWidth:44).frame(height:48)}
+            .buttonStyle(StudioButtonStyle(role:.tool,selected:active)).accessibilityLabel(title+"工具").help(title)
+            .accessibilityAddTraits(active ? [.isSelected] : [])
     }
     private var canvasToolbar: some View {
-        HStack(spacing:10) {
+        HStack(spacing:8) {
             Menu(zoom==1 ? "适应" : String(format:"×%.2f",Double(zoom))){Button("适应窗口"){zoom=1};Button("放大"){zoom=min(4,zoom+0.25)};Button("缩小"){zoom=max(0.5,zoom-0.25)}}.font(.system(size:11)).menuStyle(.borderlessButton).frame(width:62)
-            ScrollView(.horizontal){HStack(spacing:12){
+            ScrollView(.horizontal){HStack(spacing:6){
                 tool("浏览","hand.draw",active:!model.drawingBrush){model.drawingBrush=false}
                 tool("裁剪","crop",active:tab == .geometry){show(.geometry)}
                 tool("参考线","squareshape.split.3x3",active:referenceLines){referenceLines.toggle()}
                 tool("画笔","paintbrush.pointed",active:model.drawingBrush){if model.activeMask?.kind != .brush{model.addMask(.brush)};show(.masks);model.drawingBrush=true}
                 tool("局部","square.dashed",active:tab == .masks){show(.masks)}
-                tool("AI 调整","sparkles",active:assistantOpen){assistantOpen=true;fineEditing=false;model.drawingBrush=false}
+                tool("AI 调整","sparkles",active:model.editorAssistantOpen){model.editorAssistantOpen=true;fineEditing=false;model.drawingBrush=false}
                 tool("参考图","photo.on.rectangle"){model.choose(.reference)}
                 tool("滤镜","camera.filters",active:tab == .style){show(.style)}
             }}.scrollIndicators(.hidden)
@@ -130,9 +152,9 @@ struct MacEditWorkspace: View {
                 Button{model.undo()}label:{Image(systemName:"arrow.uturn.backward")}.help("撤销 ⌘Z").accessibilityLabel("撤销编辑").keyboardShortcut("z",modifiers:.command).disabled(!model.canUndo || model.agentBusy)
                 Button{model.redo()}label:{Image(systemName:"arrow.uturn.forward")}.help("重做 ⇧⌘Z").accessibilityLabel("重做编辑").keyboardShortcut("z",modifiers:[.command,.shift]).disabled(!model.canRedo || model.agentBusy)
                 Button{model.reset()}label:{Image(systemName:"arrow.counterclockwise")}.help("重置当前编辑").accessibilityLabel("重置当前编辑")
-            }.buttonStyle(.plain).font(.system(size:14)).foregroundStyle(.secondary)
+            }.buttonStyle(StudioButtonStyle(role:.icon)).font(.system(size:14))
             tool("预设","cube",active:tab == .recipe){show(.recipe)}
-        }.padding(.horizontal,14).frame(height:60).background(Color(white:0.055)).disabled(model.preview==nil)
+        }.padding(.horizontal,14).frame(height:64).background(Color(white:0.065)).disabled(model.preview==nil)
     }
     private func show(_ value: WorkspaceInspectorTab) {tab=value;fineEditing=true;if value != .masks{model.drawingBrush=false;model.showMaskOverlay=false}}
     private var previewStatus: some View {
@@ -147,19 +169,25 @@ struct MacEditWorkspace: View {
             Text(model.selected?.name ?? "尚未选择照片").font(.system(size:10)).lineLimit(1).foregroundStyle(.secondary)
             if model.selected?.isRAW==true{Text("RAW").font(.system(size:8,weight:.semibold)).foregroundStyle(studioAccent)}
             Spacer(minLength:5)
-            Button{comparing.toggle();model.showingOriginal=false}label:{Label("前后对比",systemImage:"rectangle.lefthalf.inset.filled")}.foregroundStyle(comparing ? studioAccent : .secondary).accessibilityLabel("前后对比")
+            Button{comparing.toggle();model.showingOriginal=false}label:{Label("前后对比",systemImage:"rectangle.lefthalf.inset.filled")}.foregroundStyle(comparing ? studioAccent : .secondary).accessibilityLabel("前后对比").keyboardShortcut("c",modifiers:[.command,.shift]).help("前后对比 ⇧⌘C")
             Button(model.showingOriginal ? "返回效果" : "查看原图"){model.showingOriginal.toggle();comparing=false}.foregroundStyle(.secondary).keyboardShortcut("\\",modifiers:.command).help("原图／效果 ⌘\\")
             Button{photoInfoPresented.toggle()}label:{Image(systemName:"info.circle")}.accessibilityLabel("照片与处理信息").popover(isPresented:$photoInfoPresented){VStack(alignment:.leading,spacing:10){Text(model.selected?.name ?? "").font(.headline);if let image=model.preview{Text("预览：\(image.width) × \(image.height)")};Text(model.renderStatus);Text("导出时按原片重新处理。").foregroundStyle(.secondary)}.font(.caption).padding(20).frame(width:300)}
-        }.buttonStyle(.plain).font(.system(size:10)).padding(.horizontal,14).frame(height:31).background(Color(white:0.055))
+        }.buttonStyle(StudioButtonStyle(feedback:false)).font(.system(size:11)).padding(.horizontal,10).frame(height:38).background(Color(white:0.065))
     }
     private var moduleRail: some View {
-        VStack(spacing:3){
-            ForEach(WorkspaceInspectorTab.allCases,id:\.self){item in Button{
-                if item == .assistant{assistantOpen.toggle();fineEditing = !assistantOpen;model.drawingBrush=false}
-                else{show(item)}
-            }label:{VStack(spacing:6){Image(systemName:item.symbol).font(.system(size:18,weight:.light)).frame(width:32,height:28).background((item == .assistant ? assistantOpen : tab==item && fineEditing) ? Color.white.opacity(0.13) : .clear,in:RoundedRectangle(cornerRadius:6));Text(item.rawValue).font(.system(size:9))}.foregroundStyle((item == .assistant ? assistantOpen : tab==item && fineEditing) ? studioAccent : Color.white.opacity(0.56)).frame(width:52,height:59)}.buttonStyle(.plain).accessibilityLabel(item.rawValue+"面板")}
+        VStack(spacing:5){
+            ForEach(WorkspaceInspectorTab.allCases,id:\.self){item in
+                let selected=item == .assistant ? model.editorAssistantOpen : tab==item && fineEditing
+                Button{
+                    if item == .assistant{model.editorAssistantOpen.toggle();fineEditing = !model.editorAssistantOpen;model.drawingBrush=false}
+                    else{show(item)}
+                }label:{VStack(spacing:6){Image(systemName:item.symbol).font(.system(size:18,weight:.regular));Text(item.rawValue).font(.system(size:10,weight:.medium))}.frame(width:52,height:56)}
+                    .buttonStyle(StudioButtonStyle(role:.tool,selected:selected)).accessibilityLabel(item.rawValue+"面板")
+                    .accessibilityAddTraits(selected ? [.isSelected] : []).help(item.rawValue)
+            }
             Spacer(minLength:0)
-        }.padding(.top,12).frame(width:58).background(Color(white:0.075))
+        }.padding(.horizontal,6).padding(.top,12).frame(width:66).background(StudioPalette.chrome)
+            .overlay(alignment:.leading){StudioPalette.line.frame(width:1)}
     }
     private var inspector: some View {
         VStack(spacing:0){
@@ -167,10 +195,10 @@ struct MacEditWorkspace: View {
                 Label(tab.rawValue=="调色" ? "色彩调节" : tab.rawValue,systemImage:tab.symbol).font(.system(size:12,weight:.medium))
                 Spacer()
                 Button {model.applyBeautyStyle(.chinese,intensity:.standard);show(.portrait)} label:{Label("中式美颜",systemImage:"sparkles")}
-                    .font(.system(size:11,weight:.medium)).buttonStyle(.plain).foregroundStyle(studioAccent)
+                    .font(.system(size:11,weight:.medium)).buttonStyle(StudioButtonStyle()).foregroundStyle(studioAccent)
                     .keyboardShortcut("b",modifiers:[.command,.shift]).help("一键中式美颜 ⇧⌘B").accessibilityLabel("一键中式美颜")
                     .disabled(model.preview==nil || model.agentBusy || model.workflowBusy || model.batchSnapshot?.active == true)
-            }.padding(.horizontal,16).frame(height:42)
+            }.padding(.horizontal,14).frame(height:50)
             ScrollView{
                 VStack(alignment:.leading,spacing:0){
                     switch tab{
@@ -187,7 +215,7 @@ struct MacEditWorkspace: View {
                 }.padding(.horizontal,12).padding(.bottom,16).disabled(model.selected==nil || (model.agentBusy && tab != .assistant))
             }.id(tab)
             HStack(spacing:8){Button("保存预设"){show(.recipe)};Button("同步所选参数…"){model.presentRecipeSynchronization()}.disabled(!model.canSynchronize)}.font(.system(size:10)).buttonStyle(.bordered).controlSize(.small).padding(12)
-        }.background(Color(white:0.095))
+        }.background(StudioPalette.panel)
     }
     private var recipeInspector: some View {
         Group {

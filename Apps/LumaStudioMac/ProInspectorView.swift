@@ -13,7 +13,7 @@ struct ProInspectorView: View {
     @State private var expanded: Set<String>=["whiteBalance","tone"]
     init(model: AppModel,section: ParameterSection? = nil) {self.model=model;self.section=section}
     var body: some View {
-        VStack(alignment:.leading,spacing:10) {
+        VStack(alignment:.leading,spacing:8) {
             if section == nil {ProHistogramPanel(model:model)}
             HStack(spacing:7) {
                 Image(systemName:"magnifyingglass").foregroundStyle(.tertiary)
@@ -288,12 +288,12 @@ struct ProScalarRow: View {
                 Text(title).foregroundStyle(.primary.opacity(0.75)).onTapGesture(count:2,perform:reset)
                 if automatic {Text("相机").font(.system(size:8)).foregroundStyle(.tertiary)}
                 Spacer(minLength:2)
-                TextField("数值",value:display,format:.number.precision(.fractionLength(step*scale>=0.99 ? 0 : (step*scale>=0.09 ? 1 : 2)))).textFieldStyle(.plain).multilineTextAlignment(.trailing).monospacedDigit().frame(width:60).focused($numberFocused).accessibilityLabel(title+"数值").onSubmit{numberFocused=false}
+                TextField("数值",value:display,format:.number.precision(.fractionLength(step*scale>=0.99 ? 0 : (step*scale>=0.09 ? 1 : 2)))).textFieldStyle(.plain).multilineTextAlignment(.trailing).monospacedDigit().frame(width:62,height:26).padding(.horizontal,5).background(Color.white.opacity(0.045),in:RoundedRectangle(cornerRadius:5)).overlay(RoundedRectangle(cornerRadius:5).strokeBorder(numberFocused ? studioAccent.opacity(0.6) : .clear,lineWidth:1)).focused($numberFocused).accessibilityLabel(title+"数值").onSubmit{numberFocused=false}
                 if !unit.isEmpty {Text(unit.trimmingCharacters(in:.whitespaces)).foregroundStyle(.secondary).frame(minWidth:11)}
-                Button{model.toggleParameterLock(id)}label:{Image(systemName:locked ? "lock.fill" : "lock.open").font(.system(size:9)).foregroundStyle(locked ? studioAccent : .secondary)}.buttonStyle(.plain).help("锁定只限制 AI，仍可手动调整").accessibilityLabel((locked ? "解锁" : "锁定")+title)
-                Button(action:reset){Image(systemName:"arrow.counterclockwise").font(.system(size:9))}.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("重置"+title)
+                Button{model.toggleParameterLock(id)}label:{Image(systemName:locked ? "lock.fill" : "lock.open").font(.system(size:9)).foregroundStyle(locked ? studioAccent : .secondary)}.buttonStyle(StudioButtonStyle(role:.icon)).help("锁定只限制 AI，仍可手动调整").accessibilityLabel((locked ? "解锁" : "锁定")+title)
+                Button(action:reset){Image(systemName:"arrow.counterclockwise").font(.system(size:9))}.buttonStyle(StudioButtonStyle(role:.icon,feedback:false)).foregroundStyle(.secondary).help("恢复默认值").accessibilityLabel("重置"+title)
             }.font(.system(size:11))
-            Slider(value:sliderValue,in:range,onEditingChanged:{editing in if editing{model.beginParameterGesture()}else{model.endParameterGesture()}}).controlSize(.small).accessibilityLabel(title)
+            Slider(value:sliderValue,in:range,onEditingChanged:{editing in if editing{model.beginParameterGesture()}else{model.endParameterGesture()}}).controlSize(.regular).accessibilityLabel(title)
                 .accessibilityAdjustableAction{direction in
                     switch direction {case .increment:sliderValue.wrappedValue=value+step;case .decrement:sliderValue.wrappedValue=value-step;@unknown default:break}
                 }
